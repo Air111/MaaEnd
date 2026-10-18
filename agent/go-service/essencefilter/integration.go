@@ -243,7 +243,7 @@ func runUnifiedSkillDecision(
 		return false
 	}
 
-	reportOCRSkills(ctx, skills, ocr.Levels, matchResult.Kind != matchapi.MatchNone)
+	reportOCRSkills(ctx, skills, ocr.Levels, matchResult.Kind != matchapi.MatchNone && matchResult.Kind != matchapi.MatchMismatch)
 
 	switch matchResult.Kind {
 	case matchapi.MatchExact:
@@ -310,7 +310,7 @@ func runUnifiedSkillDecision(
 			ctx.OverrideNext(arg.CurrentTaskName, []maa.NextItem{{Name: next.Skip}})
 		}
 
-	case matchapi.MatchNone:
+	case matchapi.MatchMismatch, matchapi.MatchNone:
 		if matchResult.ShouldDiscard {
 			reportNoMatch(ctx, true)
 			ctx.OverrideNext(arg.CurrentTaskName, []maa.NextItem{{Name: next.Discard}})

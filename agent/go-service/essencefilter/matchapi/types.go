@@ -105,6 +105,10 @@ const (
 	MatchExact
 	MatchFuturePromising
 	MatchSlot3Level3Practical
+	// MatchMismatch means all three OCR texts were recognized, but they do not
+	// form a valid target (e.g. duplicate skill pools). It is a confirmed
+	// non-match and is subject to DiscardUnmatched.
+	MatchMismatch
 )
 
 // MatchResult is the single unified output of the matching engine.

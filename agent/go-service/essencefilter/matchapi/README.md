@@ -98,6 +98,9 @@ if err != nil {
 | `MatchExact` | 非空（可能多把） | 长度 3，对应目标组合 | `true` | `false` | 无扩展字段 |
 | `MatchFuturePromising` | 通常为空 | 三槽为 OCR 技能文本；`SkillIDs` 为按槽池尽力解析后的结果 | `LockFuturePromising` | `false` | 使用 `ExtLevelSum` / `ExtMinTotal` 供上层组装提示文案 |
 | `MatchSlot3Level3Practical` | 视规则而定 | 规范槽位技能 | `LockSlot3Practical` | `false` | 使用 `ExtSlot3Lv` / `ExtMinLevel` 供上层组装提示文案 |
-| `MatchNone` | 空 | `SkillIDs` 空；`SkillsChinese` 仍为 OCR 三槽文本 | `false` | `DiscardUnmatched` | 无内置 `Reason`；是否废弃只看 `ShouldDiscard` |
+| `MatchMismatch` | 空 | `SkillIDs` 空；`SkillsChinese` 仍为 OCR 三槽文本 | `false` | `DiscardUnmatched` | 三条已识别，但类型重复/缺失（确认不匹配） |
+| `MatchNone` | 空 | `SkillIDs` 空；`SkillsChinese` 仍为 OCR 三槽文本 | `false` | `DiscardUnmatched`（distinct 无规则）/ `false`（无法识别） | 兜底：distinct 无规则，或至少一条 OCR 无法识别 |
 
-未命中时废弃与否只看 `ShouldDiscard`（由 `DiscardUnmatched` 决定）；如果需要日志/UI 文案，请由调用方自行根据 `Kind` 和扩展字段生成。
+`ShouldDiscard` 来自 `DiscardUnmatched`（UI「未匹配时废弃」），对 `MatchMismatch` 和 distinct 无规则的 `MatchNone` 生效；无法识别的 `MatchNone` 固定 `false`。
+
+如果需要日志/UI 文案，请由调用方自行根据 `Kind` 和扩展字段生成。

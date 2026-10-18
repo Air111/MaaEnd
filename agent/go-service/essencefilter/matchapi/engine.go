@@ -126,11 +126,11 @@ func (e *Engine) MatchOCR(ocr OCRInput, opts EssenceFilterOptions) (*MatchResult
 	// 1) Exact matching on (slot1,slot2,slot3) skill IDs.
 	ocrSkills := [3]string{ocr.Skills[0], ocr.Skills[1], ocr.Skills[2]}
 	ocrLevels := [3]int{ocr.Levels[0], ocr.Levels[1], ocr.Levels[2]}
-	ocrSkills, ocrLevels, hasDistinctSkillPools := e.reorderByPoolAssignmentIfPossible(ocrSkills, ocrLevels)
+	ocrSkills, ocrLevels, assignmentStatus := e.reorderByPoolAssignmentIfPossible(ocrSkills, ocrLevels)
 
 	// If no rarity is selected, exact matching must be disabled.
 	var exact *SkillCombinationMatch
-	if len(targets) > 0 {
+	if len(targets) > 0 && assignmentStatus == poolAssignmentDistinct {
 		exactMatched, ok := e.matchEssenceSkills(ocrSkills, targets)
 		if ok {
 			exact = exactMatched
@@ -150,7 +150,7 @@ func (e *Engine) MatchOCR(ocr OCRInput, opts EssenceFilterOptions) (*MatchResult
 	// 2) Extension rules: evaluate both first, then OR lock decision.
 	futureMatched := false
 	futureMinTotal := 0
-	if opts.KeepFuturePromising && opts.FuturePromisingMinTotal > 0 && hasDistinctSkillPools {
+	if opts.KeepFuturePromising && opts.FuturePromisingMinTotal > 0 && assignmentStatus == poolAssignmentDistinct {
 		if e.matchFuturePromising(ocrSkills, ocrLevels, opts.FuturePromisingMinTotal) {
 			futureMatched = true
 			futureMinTotal = opts.FuturePromisingMinTotal
@@ -243,14 +243,29 @@ func (e *Engine) MatchOCR(ocr OCRInput, opts EssenceFilterOptions) (*MatchResult
 		}, nil
 	}
 
-	// 4) No match.
+	// 4) No rule matched.
+	if assignmentStatus == poolAssignmentDuplicate {
+		return &MatchResult{
+			Kind:          MatchMismatch,
+			SkillIDs:      []int{},
+			SkillsChinese: []string{ocrSkills[0], ocrSkills[1], ocrSkills[2]},
+			Weapons:       []WeaponData{},
+			ShouldLock:    false,
+			ShouldDiscard: opts.DiscardUnmatched,
+		}, nil
+	}
+
+	shouldDiscard := opts.DiscardUnmatched
+	if assignmentStatus == poolAssignmentUnrecognized {
+		shouldDiscard = false
+	}
 	return &MatchResult{
 		Kind:          MatchNone,
 		SkillIDs:      []int{},
 		SkillsChinese: []string{ocrSkills[0], ocrSkills[1], ocrSkills[2]},
 		Weapons:       []WeaponData{},
 		ShouldLock:    false,
-		ShouldDiscard: opts.DiscardUnmatched,
+		ShouldDiscard: shouldDiscard,
 	}, nil
 }
 
@@ -294,13 +309,43 @@ func (e *Engine) MatchInventoryOCR(ocr OCRInput) (*InventoryMatch, error) {
 	return &result, nil
 }
 
+// poolAssignmentStatus is the tri-state result of resolving the three OCR texts
+// to skill pools. The zero value is deliberately the safe "unrecognized" state:
+// a path that forgets to classify must skip, never discard.
+type poolAssignmentStatus uint8
+
+const (
+	poolAssignmentUnrecognized poolAssignmentStatus = iota
+	poolAssignmentDuplicate
+	poolAssignmentDistinct
+)
+
+func (s poolAssignmentStatus) String() string {
+	switch s {
+	case poolAssignmentDistinct:
+		return "distinct"
+	case poolAssignmentDuplicate:
+		return "duplicate"
+	case poolAssignmentUnrecognized:
+		return "unrecognized"
+	default:
+		return "unknown"
+	}
+}
+
 // reorderByPoolAssignmentIfPossible reorders OCR skills/levels into slot1/2/3 order
-// by inferring which slot-pool each OCR skill belongs to. The third return reports
-// whether the skills map uniquely to all three pools.
+// by inferring which slot-pool each OCR skill belongs to.
 //
-// If the inference is not unique (e.g. ambiguous match or duplicate slot assignment),
-// it falls back to the original input order.
-func (e *Engine) reorderByPoolAssignmentIfPossible(inSkills [3]string, inLevels [3]int) ([3]string, [3]int, bool) {
+// The third return distinguishes three states:
+//   - poolAssignmentUnrecognized: at least one text cannot be mapped to a pool;
+//   - poolAssignmentDuplicate: all texts are recognized, but they do not cover
+//     three different pools;
+//   - poolAssignmentDistinct: all texts map to slot1, slot2 and slot3 exactly once.
+//
+// Non-distinct states keep the original input order. The tri-state status is
+// intentional: MatchOCR needs to distinguish a confirmed duplicate from an OCR
+// failure instead of collapsing both into a single bool.
+func (e *Engine) reorderByPoolAssignmentIfPossible(inSkills [3]string, inLevels [3]int) ([3]string, [3]int, poolAssignmentStatus) {
 	// Default: keep input order.
 	outSkills := inSkills
 	outLevels := inLevels
@@ -313,18 +358,18 @@ func (e *Engine) reorderByPoolAssignmentIfPossible(inSkills [3]string, inLevels 
 	for i := 0; i < 3; i++ {
 		slot, ok := e.assignSlotForOCRText(inSkills[i])
 		if !ok {
-			return outSkills, outLevels, false
+			return outSkills, outLevels, poolAssignmentUnrecognized
 		}
 		if used[slot] {
 			// Duplicate pool assignment (e.g. 2x slot1 + 1x slot2) => keep default order.
-			return outSkills, outLevels, false
+			return outSkills, outLevels, poolAssignmentDuplicate
 		}
 		used[slot] = true
 		assignedSlots[i] = slot
 	}
 
 	if !used[1] || !used[2] || !used[3] {
-		return outSkills, outLevels, false
+		return outSkills, outLevels, poolAssignmentDuplicate
 	}
 
 	// Build ordered arrays: [slot1, slot2, slot3].
@@ -336,7 +381,7 @@ func (e *Engine) reorderByPoolAssignmentIfPossible(inSkills [3]string, inLevels 
 		skillsOrdered[orderedIdx] = inSkills[i]
 		levelsOrdered[orderedIdx] = inLevels[i]
 	}
-	return skillsOrdered, levelsOrdered, true
+	return skillsOrdered, levelsOrdered, poolAssignmentDistinct
 }
 
 // assignSlotForOCRText returns which slot pool the given OCR skill text belongs to.
