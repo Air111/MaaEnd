@@ -22,6 +22,46 @@
             "option": [
                 "ExportInventory"
             ]
+        },
+        {
+            "name": "EssenceDiscard",
+            "label": "$task.EssenceDiscard.label",
+            "entry": "EssenceFilterMain",
+            "description": "$task.EssenceDiscard.description",
+            "group": [
+                "valuables_vault"
+            ],
+            "controller": [
+                "ADB",
+                "CloudADB",
+                "Linux-Gamescope",
+                "Linux-ScreenCast",
+                "Linux-Wlroots",
+                "MacOS-Background",
+                "MacOS-Front",
+                "PlayCover",
+                "Win32-Front"
+            ],
+            "pipeline_override": {
+                "EssenceFilterInit": {
+                    "attach": {
+                        "export_inventory": false,
+                        "rarity6_weapon": false,
+                        "rarity5_weapon": false,
+                        "rarity4_weapon": false,
+                        "flawless_essence": true,
+                        "pure_essence": false,
+                        "keep_future_promising": true,
+                        "future_promising_min_total": 3,
+                        "lock_future_promising": false,
+                        "keep_slot3_level3_practical": false,
+                        "slot3_min_level": 3,
+                        "lock_slot3_practical": false,
+                        "discard_unmatched": true,
+                        "export_calculator_script": false
+                    }
+                }
+            }
         }
     ],
     "option": {

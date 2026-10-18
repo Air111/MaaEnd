@@ -2249,6 +2249,8 @@
     "task.EnvironmentMonitoring.route.Waterlamp.failed": "<span style=\"color: red; font-weight: bold;\">Waterlamp task failed</span>",
     "task.EnvironmentMonitoring.route.WitheredBranches.failed": "<span style=\"color: red; font-weight: bold;\">Withered Branches task failed</span>",
     "task.EnvironmentMonitoring.route.XiraniteNexus.failed": "<span style=\"color: red; font-weight: bold;\">Xiranite Nexus task failed</span>",
+    "task.EssenceDiscard.description": "Scans unlocked, non-discarded flawless essences in the Vault and discards those whose three attributes do not cover all three types (a duplicated type is considered useless).",
+    "task.EssenceDiscard.label": "🗑️ Essence Filter Discard",
     "task.EssenceFilter.description": "Data sync takes time. New weapons may not be supported for about a week around version updates.",
     "task.EssenceFilter.focus.afterbattle_tier_boundary_flawless": "Flawless-only: Pure essence detected, exiting post-battle filter",
     "task.EssenceFilter.focus.afterbattle_tier_skip_pure_only": "Pure-only: Skipping flawless essence",

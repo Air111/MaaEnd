@@ -2249,6 +2249,8 @@
     "task.EnvironmentMonitoring.route.Waterlamp.failed": "<span style=\"color: red; font-weight: bold;\">水灯虫：タスク失敗</span>",
     "task.EnvironmentMonitoring.route.WitheredBranches.failed": "<span style=\"color: red; font-weight: bold;\">枯れ枝：タスク失敗</span>",
     "task.EnvironmentMonitoring.route.XiraniteNexus.failed": "<span style=\"color: red; font-weight: bold;\">枢壌儀：タスク失敗</span>",
+    "task.EssenceDiscard.description": "貴重品庫の未ロック・未廃棄の無瑕基質を走査し、3つの詞条が3種類を網羅していない（同じ種類が重複している）基質を廃棄します。",
+    "task.EssenceDiscard.label": "🗑️基質フィルター廃棄",
     "task.EssenceFilter.description": "データ同期には時間がかかるため、バージョン更新前後の約1週間は新武器に対応できない場合があります。",
     "task.EssenceFilter.focus.afterbattle_tier_boundary_flawless": "純粋のみ選択中：清浄基質を検出したため、戦闘後フィルタを終了します",
     "task.EssenceFilter.focus.afterbattle_tier_skip_pure_only": "清浄のみ選択中：純粋基質をスキップします",

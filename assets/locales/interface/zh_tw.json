@@ -2249,6 +2249,8 @@
     "task.EnvironmentMonitoring.route.Waterlamp.failed": "<span style=\"color: red; font-weight: bold;\">水燈蟲任務失敗</span>",
     "task.EnvironmentMonitoring.route.WitheredBranches.failed": "<span style=\"color: red; font-weight: bold;\">枯枝任務失敗</span>",
     "task.EnvironmentMonitoring.route.XiraniteNexus.failed": "<span style=\"color: red; font-weight: bold;\">樞壤儀任務失敗</span>",
+    "task.EssenceDiscard.description": "在貴重品庫中掃描未鎖定、未丟棄的無瑕基質，三條詞條未覆蓋三種類型的基質將被丟棄（存在重複類型即視為無用）",
+    "task.EssenceDiscard.label": "🗑️基質篩選丟棄",
     "task.EssenceFilter.description": "資料同步需要時間，版本更新前後一週可能無法相容新武器",
     "task.EssenceFilter.focus.afterbattle_tier_boundary_flawless": "僅選擇無瑕基質：偵測到高純基質，退出戰後篩選",
     "task.EssenceFilter.focus.afterbattle_tier_skip_pure_only": "僅選擇高純基質：跳過無瑕基質",

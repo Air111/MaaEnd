@@ -2249,6 +2249,8 @@
     "task.EnvironmentMonitoring.route.Waterlamp.failed": "<span style=\"color: red; font-weight: bold;\">水灯虫任务失败</span>",
     "task.EnvironmentMonitoring.route.WitheredBranches.failed": "<span style=\"color: red; font-weight: bold;\">枯枝任务失败</span>",
     "task.EnvironmentMonitoring.route.XiraniteNexus.failed": "<span style=\"color: red; font-weight: bold;\">枢壤仪任务失败</span>",
+    "task.EssenceDiscard.description": "在贵重品库中扫描未锁定、未弃置的无瑕基质，三条词条未覆盖三种类型的基质将被弃置（存在重复类型即视为无用）",
+    "task.EssenceDiscard.label": "🗑️基质筛选弃置",
     "task.EssenceFilter.description": "数据同步需要时间，版本更新附近一周可能无法兼容新武器",
     "task.EssenceFilter.focus.afterbattle_tier_boundary_flawless": "仅选择无瑕基质：检测到高纯基质，退出战后筛选",
     "task.EssenceFilter.focus.afterbattle_tier_skip_pure_only": "仅选择高纯基质：跳过无瑕基质",

@@ -2249,6 +2249,8 @@
     "task.EnvironmentMonitoring.route.Waterlamp.failed": "<span style=\"color: red; font-weight: bold;\">수등충 작업 실패</span>",
     "task.EnvironmentMonitoring.route.WitheredBranches.failed": "<span style=\"color: red; font-weight: bold;\">마른 가지 작업 실패</span>",
     "task.EnvironmentMonitoring.route.XiraniteNexus.failed": "<span style=\"color: red; font-weight: bold;\">중추 식양 장치 작업 실패</span>",
+    "task.EssenceDiscard.description": "귀중품고의 잠금·폐기되지 않은 무결 기질을 검사하여, 세 가지 속성이 세 가지 유형을 모두 포함하지 않는(중복 유형이 있는) 기질을 폐기합니다.",
+    "task.EssenceDiscard.label": "🗑️ 기질 필터 폐기",
     "task.EssenceFilter.description": "데이터 동기화에는 시간이 필요하므로 버전 업데이트 전후 약 1주일 동안 새 무기를 지원하지 못할 수 있습니다.",
     "task.EssenceFilter.focus.afterbattle_tier_boundary_flawless": "무결만 선택: 순수 기질이 감지되어 전투 후 필터를 종료합니다",
     "task.EssenceFilter.focus.afterbattle_tier_skip_pure_only": "순수만 선택: 무결 기질을 건너뜁니다",
