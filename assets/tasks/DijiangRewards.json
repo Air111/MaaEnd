@@ -184,7 +184,6 @@
             "type": "switch",
             "label": "$option.FastCollect.label",
             "description": "$option.FastCollect.description",
-            "default_case": "Yes",
             "cases": [
                 {
                     "name": "Yes",
@@ -204,13 +203,13 @@
                         }
                     }
                 }
-            ]
+            ],
+            "default_case": "Yes"
         },
         "FastCollectClue": {
             "type": "switch",
             "label": "$option.FastCollectClue.label",
             "description": "$option.FastCollectClue.description",
-            "default_case": "Yes",
             "cases": [
                 {
                     "name": "Yes",
@@ -228,13 +227,13 @@
                         }
                     }
                 }
-            ]
+            ],
+            "default_case": "Yes"
         },
         "FastCollectProduction": {
             "type": "switch",
             "label": "$option.FastCollectProduction.label",
             "description": "$option.FastCollectProduction.description",
-            "default_case": "Yes",
             "cases": [
                 {
                     "name": "Yes",
@@ -252,7 +251,8 @@
                         }
                     }
                 }
-            ]
+            ],
+            "default_case": "Yes"
         },
         "RecoveryEmotionStage": {
             "type": "switch",
@@ -507,10 +507,10 @@
             "type": "switch",
             "label": "$option.ClueSendCustomize.label",
             "description": "$option.ClueSendCustomize.description",
-            "default_case": "No",
             "cases": [
                 {
                     "name": "Yes",
+                    "option": ["CustomSendCluesCheckbox"],
                     "pipeline_override": {
                         "ReceptionRoomSendClueOne": {
                             "enabled": false
@@ -539,8 +539,7 @@
                         "ReceptionRoomSendCluesSwipe": {
                             "enabled": false
                         }
-                    },
-                    "option": ["CustomSendCluesCheckbox"]
+                    }
                 },
                 {
                     "name": "No",
@@ -568,22 +567,13 @@
                         }
                     }
                 }
-            ]
+            ],
+            "default_case": "No"
         },
         "CustomSendCluesCheckbox": {
             "type": "checkbox",
             "label": "$option.ClueSendCustomizeCheckbox.label",
             "description": "$option.ClueSendCustomizeCheckbox.description",
-            "min_count": 1,
-            "default_case": [
-                "UWST",
-                "TGCC",
-                "HAS",
-                "SteelOath",
-                "Tranquility",
-                "Hannabit",
-                "Sesqa"
-            ],
             "cases": [
                 {
                     "name": "UWST",
@@ -655,7 +645,17 @@
                         }
                     }
                 }
-            ]
+            ],
+            "default_case": [
+                "UWST",
+                "TGCC",
+                "HAS",
+                "SteelOath",
+                "Tranquility",
+                "Hannabit",
+                "Sesqa"
+            ],
+            "min_count": 1
         },
         "QuickGiveDuplicateClues": {
             "type": "switch",
