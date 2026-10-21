@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import ctypes
 import os
 import sys
@@ -7,7 +5,6 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 INSTALL_DIR = PROJECT_ROOT / "install"
