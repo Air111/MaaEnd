@@ -23,28 +23,6 @@
             "Node.Recognition.Succeeded": "您需要同意知悉可能的后果才能使用自动走路送货功能"
         }
     },
-    "SeizeDeliveryJobsCheckOngoingJob": {
-        "desc": "任务入口门控：开始执行任务时确认身上是否已有送货委托，再决定抢单还是走后处理",
-        "pre_delay": 0,
-        "action": "Custom",
-        "custom_action": "SubTask",
-        "custom_action_param": {
-            "sub": [
-                "AutoDeliveryEnsureDeliveryMissionSelected"
-            ],
-            "continue": false,
-            "strict": true
-        },
-        "post_delay": 0,
-        "rate_limit": 0,
-        "next": [
-            "SeizeDeliveryJobsHandleOngoingJob"
-        ],
-        "on_error": [
-            "[Anchor]SeizeDeliveryJobsAfterMissionListExhausted",
-            "SeizeDeliveryJobsOngoingJobUnknown"
-        ]
-    },
     "SeizeDeliveryJobsNoOngoingJob": {
         "desc": "身上没有送货委托：进入抢单主流程",
         "recognition": "DirectHit",
@@ -63,10 +41,21 @@
         }
     },
     "SeizeDeliveryJobsHandleOngoingJob": {
-        "desc": "身上已有送货委托：能转交就先转交，不能转交再按后处理选项处理",
+        "desc": "身上已有送货委托：进入任务详情，能转交就先转交，不能转交再按后处理选项处理",
+        // 每次任务运行最多处理一次已有委托：转交未生效时不再经主流程重复进入，
+        // 落回抢单链后由刷新预算自然收尾，与原入口门控的有界语义一致
+        "max_hit": 1,
         "recognition": "DirectHit",
         "pre_delay": 0,
-        "action": "DoNothing",
+        "action": "Custom",
+        "custom_action": "SubTask",
+        "custom_action_param": {
+            "sub": [
+                "AutoDeliveryOpenDeliveryMission"
+            ],
+            "continue": false,
+            "strict": true
+        },
         // 转交流程由 DeliveryJobs 组件的转交链负责，转交完成后按本锚点回到抢单主流程
         "anchor": {
             "DeliveryJobsReturnToDepotNode": "SeizeDeliveryJobsMain"
@@ -76,6 +65,10 @@
         "next": [
             "DeliveryJobsClickTransferJob",
             "SeizeDeliveryJobsOngoingJobFound"
+        ],
+        // 本节点由委托列表内的 ExistDueTask 跳转而来，进任务详情失败时停止任务，避免被误判为无单
+        "on_error": [
+            "SeizeDeliveryJobsOngoingJobUnknown"
         ],
         "focus": {
             "Node.Recognition.Succeeded": "$task.SeizeDeliveryJobs.focus.ongoingJobFound"
@@ -95,7 +88,7 @@
         }
     },
     "SeizeDeliveryJobsOngoingJobUnknown": {
-        "desc": "既没有确认到身上的送货委托、也没有确认列表中没有送货委托：停止任务，避免被误判为无单",
+        "desc": "委托列表中检测到已有委托，但进入任务详情失败：停止任务，避免被误判为无单而抢单",
         "recognition": "DirectHit",
         "pre_delay": 0,
         "action": "Custom",
@@ -155,7 +148,7 @@
         ]
     },
     "SeizeDeliveryJobsExistDueTask": {
-        "desc": "发现已经接过单了，或许可以跳到后处理节点",
+        "desc": "委托列表中发现已经接过单（存在查看当前任务按钮），转入转交/后处理流程",
         "recognition": "And",
         "all_of": [
             "__SeizeDeliveryJobsRecoViewCurrentJob"
@@ -163,10 +156,8 @@
         "pre_delay": 0,
         "post_delay": 0,
         "next": [
-            // 已接过单，且开启了后处理，就会跳转后续处理
-            "SeizeDeliveryJobsPostProcessingEntry",
-            // 已接过单，但没开启后处理，就会跳转失败节点
-            "SeizeDeliveryJobsFailedExistDueTask"
+            // 能转交的先转交，转交完成回到抢单主流程；不能转交按后处理选项处理
+            "SeizeDeliveryJobsHandleOngoingJob"
         ],
         "focus": {
             "Node.Recognition.Succeeded": "手里已经有单了"
