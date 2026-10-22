@@ -3,7 +3,7 @@
         {
             "name": "SeizeDeliveryJobs",
             "label": "$task.SeizeDeliveryJobs.label",
-            "entry": "SeizeDeliveryJobsCheckOngoingJob",
+            "entry": "SeizeDeliveryJobsMain",
             "description": "$task.SeizeDeliveryJobs.description",
             "group": [
                 "regional_development"
