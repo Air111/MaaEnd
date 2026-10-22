@@ -16,6 +16,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
+            "__ScenePrivateWorldEnterMenuMissionKey",
             "__ScenePrivateWorldEnterMenuMission",
             "[JumpBack]SceneAnyEnterWorld"
         ]
@@ -37,6 +38,7 @@
         "rate_limit": 0,
         "next": [
             "InRegionalDevelopment",
+            "__ScenePrivateWorldEnterMenuRegionalDevelopmentKey",
             "__ScenePrivateWorldEnterMenuRegionalDevelopment",
             "[JumpBack]__ScenePrivateMenuRegionalDevelopmentView2EnterMenuRegionalDevelopment",
             "[JumpBack]SceneAnyEnterWorld"

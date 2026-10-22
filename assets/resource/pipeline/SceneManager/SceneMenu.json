@@ -122,6 +122,31 @@
         "pre_delay": 0,
         "post_delay": 1500 // 3D动画菜单会一直动无法用wait_freeze
     },
+    // 按键进入任务界面：游戏默认键位 J。移动端控制器（ADB / CloudADB / PlayCover / 原生安卓）
+    // 不走按键控制，在 resource_adb 的对应覆盖里禁用本节点，保持原有点击链。
+    "__ScenePrivateWorldEnterMenuMissionKey": {
+        "desc": "从大世界按键进入任务界面",
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": [
+                    "InWorld"
+                ]
+            }
+        },
+        "pre_delay": 0,
+        "action": {
+            "type": "ClickKey",
+            "param": {
+                "key": 74 // J，游戏默认键位：任务
+            }
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "__ScenePrivateAnyEnterMenuMissionSuccess"
+        ]
+    },
     "__ScenePrivateWorldEnterMenuMission": {
         "desc": "从大世界进入任务界面",
         "recognition": "And",
@@ -561,6 +586,33 @@
         },
         "pre_delay": 0,
         "post_delay": 0
+    },
+    // 按键进入地区建设菜单：游戏默认键位 Y。移动端控制器（ADB / CloudADB / PlayCover / 原生安卓）
+    // 不走按键控制，在 resource_adb 的对应覆盖里禁用本节点，保持原有点击链。
+    // 未解锁时同样会弹解锁弹窗，与原点击链共用关闭节点。
+    "__ScenePrivateWorldEnterMenuRegionalDevelopmentKey": {
+        "desc": "从大世界按键进入地区建设菜单",
+        "recognition": {
+            "type": "And",
+            "param": {
+                "all_of": [
+                    "InWorld"
+                ]
+            }
+        },
+        "pre_delay": 0,
+        "action": {
+            "type": "ClickKey",
+            "param": {
+                "key": 89 // Y，游戏默认键位：地区建设
+            }
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "__ScenePrivateMenuRegionalDevelopmentUnlockClose",
+            "__ScenePrivateAnyEnterMenuRegionalDevelopmentSuccess"
+        ]
     },
     "__ScenePrivateWorldEnterMenuRegionalDevelopment": {
         "desc": "从大世界进入地区建设菜单",
