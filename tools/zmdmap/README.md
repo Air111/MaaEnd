@@ -39,10 +39,11 @@ MaaEnd 的几个任务要读游戏里的物品名、商店货架、采集点、�
 
 1. **确认输入。** TableCfg（表格）和 JsonData（关卡地图、交互模板）默认取 MaaEnd 旁边同级的兄弟仓库
    `BeyondTableCfg` / `BeyondMemoryPack`，也可以用 `--table-cfg-dir` / `--json-data-dir` 指到别处。
-2. **定版本。** 每份数据最前面写的 `version` 是数据构建号（游戏资源包 `res_version` 的短写法，比如
-   `11262943-8`）。本地从兄弟仓库的提交标题里读 `Data:` 那段（合并 / revert 会盖住它，必要时用 `--version`
-   指定）；发布端那边没有仓库，就从数据目录路径里的 `initial_…_main_…` 读；都读不到就警告「这次生成出来
-   没有版本字段」。
+2. **定版本。** 每份数据最前面写的 `version` 是「客户端版本 + 数据构建号」，比如 `1.6.4+11262943-8`。
+   发布端从版本接口拿到这两个号，用 `--version` 显式传进来；本地不给 `--version` 时，客户端版本看兄弟仓库的
+   提交标题（`Client:` 那段），构建号优先看 `.beyond/ledger`（revert 提交也骗不过它），没有 ledger 就看提交
+   标题的 `Data:`；再读不到就看数据目录路径里的 `initial_…_main_…`（只有构建号）。都读不到就警告「这次生成
+   出来没有版本字段」。
 3. **生成原始形态。** 11 份数据各自从表格里取数，结果写进 `data/raw/`（只有世界坐标），同时算好 `sha256`。
    顺手写一份 `manifest.json`，说明这次发的是哪几份、每份的内容指纹 —— 就是 `fetch` 第 1 步看的那份。
 4. **入库。** 和 `fetch` 第 5 步完全一样。
@@ -54,7 +55,7 @@ MaaEnd 的几个任务要读游戏里的物品名、商店货架、采集点、�
 
 ```json
 {
-    "version": "11262943-8",
+    "version": "1.6.4+11262943-8",
     "sha256": "…",
     "…": "数据本体"
 }
@@ -62,7 +63,7 @@ MaaEnd 的几个任务要读游戏里的物品名、商店货架、采集点、�
 
 前面两个字段只在生成原始形态时定下来：
 
-- `version`：给人看的版本标签（数据构建号，同一版客户端下可能发多批，所以不用客户端版本号）。下载和入库都只照抄。
+- `version`：给人看的版本标签（客户端版本 + 数据构建号，同一版客户端下可能发多批）。下载和入库都只照抄。
 - `sha256`：**原始形态**的内容指纹。`fetch` 就是拿它跟清单比，决定要不要重新下载。
 
 入库会把本体改成底图像素，但这两个字段一个字不改 —— 所以 `data/raw/` 和 `data/` 里同名文件的 `sha256`
@@ -96,7 +97,7 @@ uv run zmdmap fetch --only sell_product            # 只要这一份
 uv run zmdmap fetch --no-download                  # 不下载，拿现有 data/raw/ 重新入库
 uv run zmdmap generate                             # 从本地游戏数据生成并入库
 uv run zmdmap generate --raw-only                  # 只出原始形态（发布用的那一份）
-uv run zmdmap generate --version 11262943-8        # 手动指定版本
+uv run zmdmap generate --version 1.6.4+11262943-8  # 手动指定版本
 uv run zmdmap generate --list                      # 列出有哪些数据、各自怎么入库
 ```
 
@@ -125,7 +126,7 @@ uv run zmdmap generate --list                      # 列出有哪些数据、各
 | `navmesh.py` | 从 BaseNav 的二进制数据里读出投影参数 |
 | `project.py` | 投影本身：换坐标、查越界、汇总用到的 zone |
 | `datafile.py` | 数据文件的读写、元数据、内容指纹 |
-| `version.py` | 版本标签怎么认、怎么比新旧、从哪儿读 |
+| `version.py` | 版本标签怎么拼、怎么比新旧、从哪儿读 |
 | `workspace.py` | 兄弟仓库的同步、生成前的检查、看 `data/` 有哪些改动 |
 | `tables.py` | 游戏表格的结构定义与类型化解码 |
 | `game_data.py` | 多语言文本、世界坐标、关卡归属 |

@@ -3,10 +3,10 @@
 各份数据一律先出原始形态（只带游戏世界坐标）进 ``--out-dir``，再入库到 ``--data-dir``：需要投影的按
 BaseNav 的 zone 表补上底图像素，不需要投影的原样复制；``--raw-only`` 时只出原始形态。
 
-``version`` 只在这里写：取 ``--version``，其次 :func:`tools.zmdmap.utils.version.data_version`（兄弟仓库提交
-标题里的 ``Data:``），再次 :func:`tools.zmdmap.utils.version.data_version_from_path`（数据目录路径里的
-``initial_…_main_…``，发布端把解包目录直接递进来时用）。写到每份原始数据的最前面；入库与 ``fetch`` 都只
-沿用，不改它。
+``version`` 只在这里写：取 ``--version``（发布端显式传，通常形如 ``1.6.4+11262943-8``），其次
+:func:`tools.zmdmap.utils.version.data_version`（兄弟仓库的 ledger 构建号 + 提交标题里的 ``Client:``），再次
+:func:`tools.zmdmap.utils.version.data_version_from_path`（数据目录路径里的 ``initial_…_main_…``，只有构建号
+那一半）。写到每份原始数据的最前面；入库与 ``fetch`` 都只沿用，不改它。
 """
 
 import time
@@ -38,7 +38,12 @@ from .utils.datafile import (
     write_json,
 )
 from .utils.log import logger
-from .utils.version import data_version, data_version_from_path, repo_data_version, res_short
+from .utils.version import (
+    data_version,
+    data_version_from_path,
+    normalize_version,
+    repo_data_version,
+)
 from .utils.workspace import (
     SYNC_MARK_UNKNOWN,
     SYNC_MARKS,
@@ -107,9 +112,10 @@ def generate_datasets(
 ) -> int:
     """跑 ``build`` 并把原始形态落到 ``out_dir``；返回成功生成的份数。
 
-    每份数据都在最前面写上元数据：版本取 ``--version`` / 从兄弟仓库或数据目录路径读到的构建号（形如
-    ``11262943-8``），都读不到就沿用已有文件里的版本（本地重算不会凭空改掉版本号）；``sha256`` 是这份数据
-    原始形态的内容指纹，按这次生成的本体重算 —— 只有这里算它，入库与 ``fetch`` 都照抄。
+    每份数据都在最前面写上元数据：版本取 ``--version`` / 从兄弟仓库 ledger 与提交标题拼出来的标签（形如
+    ``1.6.3+11010254-4``；只剩构建号时就是 ``11010254-4``），都读不到就沿用已有文件里的版本（本地重算不会
+    凭空改掉版本号）；``sha256`` 是这份数据原始形态的内容指纹，按这次生成的本体重算 —— 只有这里算它，入库与
+    ``fetch`` 都照抄。
     """
     written = 0
     for dataset in datasets:
@@ -183,7 +189,7 @@ def generate_datasets(
     "--version",
     "data_version_option",
     default=None,
-    help="写进每份数据的版本，形如 11262943-8（数据构建号；默认从兄弟仓库或数据目录路径读，都读不到就沿用原有的）",
+    help="写进每份数据的版本，形如 1.6.4+11262943-8（客户端版本+数据构建号；默认从兄弟仓库或数据目录路径读，都读不到就沿用原有的）",
 )
 @click.option(
     "--raw-only",
@@ -245,8 +251,8 @@ def generate_command(
         detected, origin = repo_data_version(table_cfg_dir.parent), "数据仓库"
     if not detected:
         detected, origin = data_version_from_path(table_cfg_dir, json_data_dir), "数据目录路径"
-    # ``--version`` 也认资源构建号的长写法（``initial_11262943-8_main_11262943-8``），统一缩成短号再写。
-    version = res_short(data_version_option) if data_version_option else detected
+    # ``--version`` 也认资源构建号的长写法（``1.6.4+initial_11262943-8_main_11262943-8``），统一缩成短号再写。
+    version = normalize_version(data_version_option) if data_version_option else detected
     if version:
         logger.info(f"数据版本：{version}（{'命令行' if data_version_option else origin}）")
     else:
