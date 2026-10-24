@@ -26,6 +26,14 @@ class MotionController;
 class PositionProvider;
 class RoiTemplateScanner;
 struct RouteTrackingState;
+struct TickFix;
+enum class TickStep;
+
+namespace semantic_nodes
+{
+struct Context;
+struct Result;
+} // namespace semantic_nodes
 
 std::optional<size_t> ResolveRouteResumeIndex(const std::vector<Waypoint>& path, const NaviPosition& position);
 
@@ -54,65 +62,98 @@ private:
         double dig_distance_sq = -1.0;
     };
 
-    bool Bootstrap();
-    bool TickNavigate();
+    struct NavigateTick;
+
+    semantic_nodes::Context SemanticContext();
     bool TickPhase(NaviPhase phase);
+    bool TickNavigate();
+    NavigateTick BeginNavigateTick();
+    TickStep RunSemanticFlow();
+    TickStep ConcludeSemanticStep(const semantic_nodes::Result& result);
+    TickStep RunInlineSemantics();
+    TickStep IdleWhileNotWalking();
+    TickStep FinishNavigateTick(const NavigateTick& tick);
+    void SelectPhaseForCurrentWaypoint(const char* reason);
+    bool ResumeAfterEscape(const char* reason);
+    void StopMotion();
+    bool FailNavigation(const char* reason, const char* log_message, double current_distance, double yaw_error, int64_t stalled_ms);
+
+    bool Bootstrap();
+
     bool CaptureCurrentPosition(bool force_global_search = false);
     void UpdateDwellWatchdog(bool captured);
+    TickStep CaptureNavigateFix(NavigateTick& tick);
+    // 丢定位由落水造成时返回 true, 此时落水自救已挂上
+    bool EndLocalizationLoss();
+    TickStep CheckDwellWatchdog();
     bool HandleLocalizationLoss();
+    bool ResumeAfterGlobalReacquire(const std::string& prior_zone, std::chrono::milliseconds loss_elapsed);
     bool ArmRiverFallRecoveryIfBlackScreenLoss(const char* via);
+    TickStep RunRiverFallRecovery(const NavigateTick& tick);
+    bool TryEnterCrossTierEscape();
+    bool PlanCrossTierEscapeCorridorFromHere(const char* reason);
+    void EndCrossTierEscapeAtRejoin();
+
+    void TrackRoute(NavigateTick& tick);
+    TickFix ReadFix(std::chrono::steady_clock::time_point now);
+    void TickNavRun(NavigateTick& tick);
+    void ConsumeCorridorPassedWaypoints(NavigateTick& tick);
+    TickStep CheckRouteProgress(NavigateTick& tick);
+    double ObserveNavigationProgress(
+        const RouteTrackingState& route,
+        double straight_to_anchor,
+        const std::optional<size_t>& anchor_index,
+        const std::chrono::steady_clock::time_point& now);
+    double ResolveArrivalDistance(const NavigateTick& tick);
+    TickStep HandleWaypointArrival(NavigateTick& tick);
+    TickStep SettleAtArrival(const NavigateTick& tick);
+    TickStep PassArrivedWaypoints(NavigateTick& tick);
+
     bool TryApplyDynamicOverlayToAnchor(
         const char* reason,
         size_t continue_index,
         const Waypoint& anchor,
         bool emit_interior_corners = false);
     bool TryApplyDynamicOverlayToNextAnchor(const char* reason);
-    // 无观测绕障: 在 origin 前方生成一块虚拟禁区, 再从当前位置重新规划到锚点。禁区存续整趟导航,
-    // 此后每次规划都绕开它。带禁区规划失败则缩小半径重试一次; 仍失败说明此处是唯一通路,
-    // 该禁区标记为 push_through 并返回 false。
+    // 在 origin 前方放一块禁区再规划到锚点; 这里是唯一通路时把禁区标成 push_through 并返回 false
     bool TryVirtualNoGoReplan(
         const char* reason,
         size_t continue_index,
         const Waypoint& anchor,
         const NaviPosition& origin,
         double stuck_heading);
-    // 走不到的上索点在这里让路: 判成够不着就丢掉这条链改走路, 返回 true 表示这一拍已经处理完。
+    // 判成够不着就丢链改走路, 返回 true 表示这一拍已处理完
     bool GiveUpUnreachableZipline(const char* reason);
     bool HandleZiplineRecoveryReplan();
-    // 滑索恢复的下一级回退: 剩余展开路径全够不着时, 切出剩余作者路线重新展开并整条换路。
-    // 滑索照常参与重展开, 只有判死过的跳被封禁; 弃索次数太多才整段退回纯走路。
     bool TryReplanRemainingAuthoredRoute(const char* reason);
-    // 到了绳底认不出提示: 这次导航不再用这根升降索, 剩余作者路线从脚下重新展开
     bool AbandonRope(uint32_t uid);
     bool HandleDynamicReplanRequest(const char* reason);
-    bool TryEnterCrossTierEscape();
-    bool PlanCrossTierEscapeCorridorFromHere(const char* reason);
-    bool ExecutePhysicalUnstick(double stuck_heading);
-    void SelectPhaseForCurrentWaypoint(const char* reason);
-    bool ResumeAfterEscape(const char* reason);
-    double ObserveNavigationProgress(
-        const RouteTrackingState& route,
-        double straight_to_anchor,
-        const std::optional<size_t>& anchor_index,
-        const std::chrono::steady_clock::time_point& now);
-    void StopMotion();
-    bool FailNavigation(const char* reason, const char* log_message, double current_distance, double yaw_error, int64_t stalled_ms);
 
+    TickStep CheckOffRouteWedge(const NavigateTick& tick);
+    TickStep RunObstacleRecovery(const NavigateTick& tick);
+    bool ClimbRecoveryLadder(const NavigateTick& tick, bool far_or_strict);
+    bool EscalatePastJump(const NavigateTick& tick);
+    bool ExecutePhysicalUnstick(double stuck_heading);
+
+    // 返回本拍的朝向误差
+    double SteerAlongCorridor(const NavigateTick& tick);
+    void UpdateAutoSprint(const NavigateTick& tick);
+    void UpdateWalkMode(NaviPhase phase);
+
+    TickStep HandlePrompts(const NavigateTick& tick);
     std::array<AsyncPromptAction*, 2> PromptActions();
-    bool TryRunPromptSubtaskWhileWalking(const RouteTrackingState& route);
-    void CompleteWaypointAfterPromptTrigger();
-    void TryRunPromptSubtaskAtRouteTail();
-    void PreWarmPromptRecognition();
     void StartScanners();
     void StopScanners();
     void StartPromptScanners();
     void StartDeviceProbe();
-    // 架子的交互提示出现就算够得着了。预筛看错时返回 false, 这一拍照常往前走
+    void PreWarmPromptRecognition();
     bool TryZiplineMountPrompt(const Waypoint& waypoint, const RouteTrackingState& route);
-    void UpdatePromptSprintSuppression();
-    // Distance and kind of the nearest point needing a slow approach; distance_sq is -1 when the route has none.
+    // 路线上没有需要减速接近的点时 distance_sq 为 -1
     PromptDistance NearestPromptDistance() const;
-    void UpdateWalkMode(NaviPhase phase);
+    void UpdatePromptSprintSuppression();
+    bool TryRunPromptSubtaskWhileWalking(const RouteTrackingState& route);
+    void CompleteWaypointAfterPromptTrigger();
+    void TryRunPromptSubtaskAtRouteTail();
 
     const NaviParam& param_;
     ActionWrapper* action_wrapper_;
@@ -126,24 +167,19 @@ private:
     NavigationRuntimeState runtime_state_ {};
     NavRunController nav_run_controller_ {};
     std::chrono::steady_clock::time_point last_global_relocalize_at_ {};
-    // 上一次由本机成功取位时记下的朝向纪元；没有观测过就是空，先验不可用。
     std::optional<uint64_t> prior_observation_epoch_;
-    // 上一拍的相位。相位切换会把镜头交给别的流程，那一刻记下的观测不再算「没被指令动过」。
     std::optional<NaviPhase> last_tick_phase_;
-    // 连续多少拍用了先验。链式本身不越权（纪元保证先验永远来自没被指令动过的观测），留着只为诊断。
+    // 只用于诊断
     int consecutive_prior_uses_ = 0;
-    // 这次导航里到了绳底认不出提示的升降索(底端 uid), 重展开时不再选它们
+    // 本次导航封禁的升降索底端 uid
     std::vector<uint32_t> rope_off_;
 
-    // Two instances of one flow; they differ only in the pipeline node names and who supplies the text.
     AsyncPromptAction collect_prompt_;
     AsyncPromptAction interact_prompt_;
 
     ObstacleDeviceRecovery device_recovery_;
-    // 上索提示的行进预筛。只复用扫描器, 不走提示动作那套: 那套认不出也照样推进路线,
-    // 而滑索认不出提示就得丢链改徒步
     std::unique_ptr<RoiTemplateScanner> zipline_mount_scanner_;
-    // Declared last so its destructor runs first — restores jogging while its collaborators are still alive.
+    // 放在最后, 析构时最先执行, 恢复慢跑时用到的成员都还在
     walkmode::Toggle walk_mode_;
 };
 
