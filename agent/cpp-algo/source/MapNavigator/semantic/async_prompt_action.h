@@ -79,7 +79,7 @@ public:
 
     const AsyncPromptActionSpec& spec() const { return spec_; }
 
-    bool armed() const { return started_; }
+    bool started() const { return started_; }
 
     bool RouteHasPoint() const;
     bool RouteEndsWithPoint() const;
@@ -104,7 +104,7 @@ public:
 
 private:
     const Waypoint* CurrentWaypointOfThisKind() const;
-    const Waypoint* LastWaypointOfThisKind() const;
+    const Waypoint* TailWaypointOfThisKind() const;
 
     // 扫描节点变了才重建, 重建会一并丢掉旧闩
     void EnsureScannerFor(const Waypoint* waypoint);
