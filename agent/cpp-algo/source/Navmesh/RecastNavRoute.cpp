@@ -1893,8 +1893,7 @@ std::optional<std::vector<WorldPoint>> routeWindow(
         }
         return false;
     };
-    const bool goal_off_deck =
-        goal_deck.has_value() && gc.x >= 0 && gc.y >= 0 && gc.x < nx && gc.y < ny && !hasDeckSpan(gc, *goal_deck);
+    const bool goal_off_deck = goal_deck.has_value() && gc.x >= 0 && gc.y >= 0 && gc.x < nx && gc.y < ny && !hasDeckSpan(gc, *goal_deck);
     if (!snap0.first.has_value()) {
         dg.err = start_deck.has_value() ? "起点附近没有未封堵的声明面" : "walk 掩膜为空";
         return std::nullopt;
