@@ -2511,5 +2511,7 @@
     "resource/image/VisitFriends/QuickNextClueExchangeAvailable": "368cdca6e78a3a2d81e98431ba72ca7a21bbe91211d2910d9f3b822005b464c4",
     "resource/image/BatchUseDetector/WulingTalositeProbe": "5ac1f896013aa10ec85a3a28de350be63c8db13611c30388143a31ab0bf6870c",
     "resource/image/SanityExtractor/sanityExtractorsRightUI": "6bb3b521884a02baaad7df86139ea722fca5c0497a1b83ee368d74b3c3680776",
-    "resource/image/SanityExtractor/extractorUISanityEssence": "90558f80ebab6959250a81ed1d7d31b450cbdb5817e7ed1020e4c86856f91fd8"
+    "resource/image/SanityExtractor/extractorUISanityEssence": "90558f80ebab6959250a81ed1d7d31b450cbdb5817e7ed1020e4c86856f91fd8",
+    "resource/image/AutoEcoFarm/AutoecofarmWhitecloseblackgrouund": "14b9459451f4b4410a1f75aed750c15e4f51e924862a61d15e7e67c65495e419",
+    "resource/image/AutoEcoFarm/AutoecofarmBlackcloseWhitegrouund": "36df158b476c53071720cba9d61f608c9dd8ea18ba8f915749561dcf8c834765"
 }
