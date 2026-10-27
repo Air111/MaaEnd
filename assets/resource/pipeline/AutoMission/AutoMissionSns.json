@@ -30,11 +30,11 @@
     },
     "AutoMissionSnsRestartTrack": {
         "desc": "等待按钮变成开始追踪",
-        "recognition":  "And",
-        "pre_wait_freezes": 100,
+        "recognition": "And",
         "all_of": [
             "TrackMissionButton"
         ],
+        "pre_wait_freezes": 100,
         "action": "Click",
         "next": [
             "AutoMissionSnsInBaker"
