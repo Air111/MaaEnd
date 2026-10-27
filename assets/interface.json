@@ -53,7 +53,7 @@
             "type": "Adb",
             "attach_resource_path": [
                 "./resource_adb",
-                "./resource_cloud_adb"
+                "./resource_cloud"
             ]
         },
         {
