@@ -401,9 +401,31 @@ function resizeCanvas() {
 
 function fitView() {
   if (!state.target) return;
-  const focus = state.chain.length ? state.chain.map((index) => towerByIndex(index)).filter(Boolean) : state.towers;
-  const points = focus.map((tower) => tower.point);
-  if (Array.isArray(state.target.goal)) points.push(state.target.goal);
+  const points = [];
+  const goal = Array.isArray(state.target.goal) ? state.target.goal : null;
+
+  if (state.chain.length) {
+    for (const index of state.chain) {
+      const tower = towerByIndex(index);
+      if (tower) points.push(tower.point);
+    }
+  } else {
+    // 未选链时不要一次缩放到整张地区图：以终点为中心取近处的架子，
+    // 既能看到局部相对位置，又不会被几百根远景架子把视野拉得太远。
+    const ranked = [...state.towers].sort((left, right) => {
+      if (!goal) return left.index - right.index;
+      const leftDistance = Math.hypot(left.point[0] - goal[0], left.point[1] - goal[1]);
+      const rightDistance = Math.hypot(right.point[0] - goal[0], right.point[1] - goal[1]);
+      return leftDistance - rightDistance;
+    });
+    const local = goal
+      ? ranked.filter((tower) => Math.hypot(tower.point[0] - goal[0], tower.point[1] - goal[1]) <= 900)
+      : ranked;
+    const focus = (local.length ? local : ranked).slice(0, 12);
+    for (const tower of focus) points.push(tower.point);
+  }
+
+  if (goal) points.push(goal);
   if (points.length) {
     let minX = Infinity;
     let minY = Infinity;
@@ -414,6 +436,14 @@ function fitView() {
       minY = Math.min(minY, point[1]);
       maxX = Math.max(maxX, point[0]);
       maxY = Math.max(maxY, point[1]);
+    }
+    if (maxX - minX < 1) {
+      minX -= 120;
+      maxX += 120;
+    }
+    if (maxY - minY < 1) {
+      minY -= 120;
+      maxY += 120;
     }
     camera.fitView([minX, minY, maxX, maxY], canvasWidth, canvasHeight, 90);
   } else if (state.basemapReady) {
@@ -533,10 +563,6 @@ function drawTowers() {
     ctx.strokeStyle = isSelected ? "#a5f3fc" : isHovered ? "#e9d5ff" : "rgba(8, 15, 28, 0.85)";
     ctx.lineWidth = isSelected || isHovered ? 3.5 : 2.5;
     ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(cx, cy, 2, 0, Math.PI * 2);
-    ctx.fillStyle = tower.powered ? "#ffffff" : "rgba(203, 213, 225, 0.7)";
-    ctx.fill();
     ctx.fillStyle = tower.powered ? "#ffffff" : "#cbd5e1";
     ctx.font = "bold 9px Consolas, monospace";
     ctx.textAlign = "center";
