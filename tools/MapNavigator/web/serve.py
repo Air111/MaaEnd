@@ -22,6 +22,9 @@
   GET  /api/zone-ids          -> assert 模式 zone 下拉可选值 (list_available_zone_ids)
   GET  /api/zipline-frames    -> 滑索世界坐标到 base 底图的只读标定
   GET  /api/zipline-records   -> 当前安装目录的只读滑索记录
+  GET  /api/zipline-routes    -> 按地区-送货点保存的手工滑索链与可编辑终点
+  POST /api/zipline-routes    -> 覆盖保存一条手工滑索链
+  DELETE /api/zipline-routes  -> 删除一条手工滑索链
   GET  /mesh/{zone_id}        -> 某几何区的 NMSH 二进制网格缓冲 (application/octet-stream)
   POST /api/route-preview     -> 按 MapNavigateAction 运行时语义展开作者路线与滑索段
   GET  /api/settings          -> 读取 ~/.maaend/mapnavigator.json
@@ -101,10 +104,19 @@ from settings_store import (  # noqa: E402
     default_connection_kind,
     supported_connection_kinds,
 )
+from zipline_routes import (  # noqa: E402
+    SavedZiplineRoute,
+    build_delivery_targets,
+    delete_saved_route,
+    load_saved_routes,
+    normalize_saved_route,
+    save_saved_route,
+)
 
 # --- 常量 -----------------------------------------------------------------------------
 ZIPLINE_FRAMES = RESOURCE_DIR.parent / "data" / "MapNavigator" / "zipline_frames.json"
 ZIPLINE_RECORDS = INSTALL_DIR / "debug" / "record" / "Ziplines.json"
+ZIPLINE_ROUTES = INSTALL_DIR / "debug" / "record" / "ZiplineRoutes.json"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 DEFAULT_PORT = 8770
@@ -119,6 +131,8 @@ def _log(message: str) -> None:
 navmesh_backend = NavmeshBackend(default_pack_path())
 # 禁区表的写与删串行: 两次保存共用同一个临时文件名, 不串行会互相替换半成品。
 _nogo_write_lock = threading.Lock()
+# 手工滑索链的读改写也串行, 避免两个页面同时保存时丢掉对方刚写入的一条
+_zipline_routes_lock = threading.Lock()
 
 
 # --- maafw 运行时 (惰性加载, 仅录制需要) ----------------------------------------------
@@ -609,6 +623,74 @@ async def api_zipline_records() -> FileResponse:
     if not ZIPLINE_RECORDS.is_file():
         raise HTTPException(status_code=404, detail="当前安装目录没有滑索记录 Ziplines.json")
     return FileResponse(ZIPLINE_RECORDS, media_type="application/json")
+
+
+def _zipline_routes_payload(
+    routes: Sequence[SavedZiplineRoute],
+    *,
+    include_targets: bool,
+    error: str = "",
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "routes": [route.as_dict() for route in routes],
+        "path": str(ZIPLINE_ROUTES),
+        "error": error,
+    }
+    if include_targets:
+        payload["targets"] = [target.as_dict() for target in build_delivery_targets()]
+    return payload
+
+
+@app.get("/api/zipline-routes")
+async def api_zipline_routes() -> dict[str, Any]:
+    """手工滑索链 + 可编辑的送货点。文件损坏时仍返回送货点，让页面能覆盖修复。"""
+
+    def _load() -> dict[str, Any]:
+        error = ""
+        try:
+            routes = load_saved_routes(ZIPLINE_ROUTES)
+        except (OSError, ValueError) as exc:
+            routes = []
+            error = f"读取手工滑索路径失败：{exc}"
+        return _zipline_routes_payload(routes, include_targets=True, error=error)
+
+    return await run_in_threadpool(_load)
+
+
+@app.post("/api/zipline-routes")
+async def api_save_zipline_route(payload: dict[str, Any] = Body(default_factory=dict)) -> dict[str, Any]:
+    """按 (账号, 区, 终点) 覆盖保存一条手工滑索链。"""
+    try:
+        route = normalize_saved_route(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    def _save() -> list[SavedZiplineRoute]:
+        with _zipline_routes_lock:
+            return save_saved_route(ZIPLINE_ROUTES, route)
+
+    try:
+        routes = await run_in_threadpool(_save)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=500, detail=f"保存手工滑索路径失败：{exc}") from exc
+    return _zipline_routes_payload(routes, include_targets=False)
+
+
+@app.delete("/api/zipline-routes")
+async def api_delete_zipline_route(account_id: str, zone_name: str, goal_x: float, goal_y: float) -> dict[str, Any]:
+    """删除某个送货点的手工滑索链，之后运行时回到自动查找。"""
+    if not account_id.strip() or not zone_name.strip():
+        raise HTTPException(status_code=400, detail="account_id 与 zone_name 不能为空")
+
+    def _delete() -> list[SavedZiplineRoute]:
+        with _zipline_routes_lock:
+            return delete_saved_route(ZIPLINE_ROUTES, account_id, zone_name, goal_x, goal_y)
+
+    try:
+        routes = await run_in_threadpool(_delete)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=500, detail=f"删除手工滑索路径失败：{exc}") from exc
+    return _zipline_routes_payload(routes, include_targets=False)
 
 
 @app.get("/api/platform")

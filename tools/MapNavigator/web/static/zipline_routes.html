@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>滑索路线 · MapNavigator</title>
+    <link rel="stylesheet" href="./css/zipline_routes.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside id="panel">
+        <header class="panel-head">
+          <div>
+            <h1>滑索路线</h1>
+            <p class="sub">按地区-送货点固定一条手工滑索链</p>
+          </div>
+          <a class="back" href="./">返回地图工具</a>
+        </header>
+
+        <div id="notice" class="notice" hidden></div>
+
+        <section class="block">
+          <label class="field">
+            <span>滑索账号</span>
+            <select id="account" class="combo"></select>
+          </label>
+          <label class="field">
+            <span>送货点</span>
+            <select id="target" class="combo"></select>
+          </label>
+          <div id="target-info" class="target-info">选择一个送货点后显示对应地图与滑索架。</div>
+        </section>
+
+        <section class="block">
+          <div class="block-title">
+            <span>路径编号</span>
+            <span id="chain-count">0 跳 · 0 站</span>
+          </div>
+          <label class="field">
+            <span>从起点到终点的滑索架编号</span>
+            <input
+              id="sequence"
+              class="entry"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="例如 3, 7, 12" />
+          </label>
+          <div class="hint">单击地图上的编号按顺序追加；再点一次最后一座可撤销。输入框也接受逗号或空格分隔的编号。</div>
+          <div id="chips" class="chips"></div>
+          <div class="actions">
+            <button id="undo" class="btn" type="button" title="移除最后一站">撤销</button>
+            <button id="clear" class="btn" type="button">清空</button>
+            <button id="save" class="btn primary" type="button">保存</button>
+            <button id="delete" class="btn danger" type="button" title="删除这个送货点已保存的手工路径">删除</button>
+          </div>
+          <div id="validation" class="validation"></div>
+        </section>
+
+        <section class="block">
+          <div class="block-title">
+            <span>已保存</span>
+            <span id="saved-count"></span>
+          </div>
+          <div id="saved-list" class="saved-list"></div>
+        </section>
+
+        <section class="block hint">
+          <p>紫色圆点是已记录的滑索架，灰色圆点未通电、运行时会被跳过。只有供电且几何可连接的编号才能保存。</p>
+          <p>
+            保存后，运行时只在这个送货点的规划区间直接按手工链走；换账号、重新导入坐标导致架子认不回、某跳走不通或本轮已失败时，会自动回退到查找。
+          </p>
+          <p>保存位置：<code id="routes-path">debug/record/ZiplineRoutes.json</code></p>
+        </section>
+      </aside>
+
+      <main id="map">
+        <img id="basemap" alt="" draggable="false" />
+        <canvas id="overlay"></canvas>
+        <div id="map-status" class="map-status" hidden></div>
+        <div class="map-controls" role="group" aria-label="视图控制">
+          <button id="zoom-in" type="button" title="放大">＋</button>
+          <button id="zoom-out" type="button" title="缩小">－</button>
+          <button id="fit" type="button" title="缩放到全部滑索架与送货点">适配</button>
+        </div>
+        <div id="tooltip" class="tooltip" hidden></div>
+      </main>
+    </div>
+    <script type="module" src="./js/zipline_routes.js"></script>
+  </body>
+</html>
