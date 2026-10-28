@@ -99,6 +99,18 @@ MapNavigator 是用于 C++ MapNavigator 模块使用的地图路径录制与编�
 
 保存后回到主页面勾选 `滑索规划`，用同一终点预览时会走这条手工链；预览和实机使用同一份 C++ 规划，因此能在出发前确认接近/下索段是否接得上。
 
+### 轻量预览（空画布，不启动 agent）
+
+只编辑滑索链时，不需要启动完整 MapNavigator，也不需要 FastAPI、maafw、numpy、cpp-algo 或游戏连接。仓库提供了一个仅用 Python 标准库的 server：
+
+```powershell
+python tools/MapNavigator/web/serve_zipline.py --install-dir D:\Apps\MaaEnd-win-x86_64 --port 18770
+```
+
+它会读取该安装目录的 `debug/record/Ziplines.json`，写入同目录的 `ZiplineRoutes.json`，并在浏览器打开 `/zipline_routes.html`。页面只显示滑索架和终点的**空画布相对位置**，不加载底图；`--no-browser` 可关闭自动打开。
+
+Windows 的 Hyper-V/WinNAT 可能排除 8718–9117 端口，所以这里默认用 18770，而不是完整工具的 8770。
+
 > [!NOTE]
 >
 > 工具读取的安装目录是项目根目录下的 `install/`；如果游戏实际使用的安装不在该目录，页面会提示没有滑索记录。此时需要让工具指向同一个安装，而不是手工把 `ZiplineRoutes.json` 复制到别处——运行时只读它自己工作目录下的 `debug/record/ZiplineRoutes.json`。

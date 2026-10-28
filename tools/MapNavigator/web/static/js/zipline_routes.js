@@ -23,6 +23,7 @@ import {latestZiplineAccountId, listZiplineAccounts, ziplineAccountLabel} from "
 const ACCOUNT_STORAGE = "maaend.mapnavigator.ziplineRouteAccount";
 const TARGET_STORAGE = "maaend.mapnavigator.ziplineRouteTarget";
 const TOWER_HIT_RADIUS = 14;
+const BLANK_CANVAS = new URLSearchParams(window.location.search).get("blank") === "1";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -41,6 +42,9 @@ const els = {
   savedCount: $("saved-count"),
   routesPath: $("routes-path"),
   notice: $("notice"),
+  backLink: $("back-link"),
+  blankHint: $("blank-hint"),
+  pageSub: $("page-sub"),
   map: $("map"),
   basemap: $("basemap"),
   overlay: $("overlay"),
@@ -122,6 +126,11 @@ function markDirty() {
 
 async function boot() {
   bindUi();
+  if (BLANK_CANVAS) {
+    els.backLink.hidden = true;
+    els.blankHint.hidden = false;
+    els.pageSub.textContent = "按地区-送货点固定一条手工滑索链 · 空画布相对位置";
+  }
   resizeCanvas();
   observeSize(els.map, () => {
     resizeCanvas();
@@ -293,7 +302,9 @@ function selectTarget(targetId, {force = false} = {}) {
 
 function updateTargetInfo() {
   if (!state.target) {
-    els.targetInfo.textContent = "选择一个送货点后显示对应地图与滑索架。";
+    els.targetInfo.textContent = BLANK_CANVAS
+      ? "选择一个送货点后显示空画布上的相对位置与滑索架。"
+      : "选择一个送货点后显示对应地图与滑索架。";
     return;
   }
   const target = state.target;
@@ -347,6 +358,13 @@ async function ensureZone(zoneName) {
   state.zone = zoneName;
   state.basemapReady = false;
   els.basemap.style.visibility = "hidden";
+
+  if (BLANK_CANVAS) {
+    els.basemap.removeAttribute("src");
+    setStatus(`相对位置视图 · ${zoneName}`, "info");
+    return;
+  }
+
   const loaded = new Promise((resolve) => {
     els.basemap.addEventListener(
       "load",
