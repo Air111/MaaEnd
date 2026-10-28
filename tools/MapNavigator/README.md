@@ -4,6 +4,8 @@ MapNavigator 是用于 C++ MapNavigator 模块使用的地图路径录制与编�
 
 本工具与 MapNavigator 组件配套使用：工具负责产出坐标，组件负责执行移动。**导出的配置如何接入 Pipeline，见[开发手册 - MapNavigator 寻路系统](../../docs/zh_cn/developers/components/map-navigator.md)。**
 
+工具默认读取仓库下的 `install/`。如果要直接查看另一个已安装的 MaaEnd，可设置环境变量 `MAPNAV_INSTALL_DIR` 指向该安装目录；`Ziplines.json`、`ZiplineRoutes.json` 和 agent 都从该目录读取。
+
 当前支持：
 
 - 通过统一的录制连接层在 `Win32`、`ADB` 与 `Linux-Gamescope` 之间切换。
