@@ -15,6 +15,7 @@
 
 #include <MaaUtils/Logger.h>
 
+#include "../../Zipline/ZiplineRoutes.h"
 #include "../../Zipline/ZiplineStore.h"
 #include "../navi_param.h"
 #include "../planning/navmesh_path_expander.h"
@@ -45,6 +46,7 @@ struct ZiplineData
 {
     zipline::ZiplineFrames frames;
     zipline::ZiplineStore store;
+    zipline::ZiplineRoutes routes;
     bool ok = false;
 };
 
@@ -62,24 +64,30 @@ std::shared_ptr<const ZiplineData> shared_data()
     static std::shared_ptr<const ZiplineData> cached;
     static std::filesystem::file_time_type frames_stamp {};
     static std::filesystem::file_time_type store_stamp {};
+    static std::filesystem::file_time_type routes_stamp {};
 
     const std::filesystem::path frames_path = zipline::ZiplineFrames::DefaultPath();
     const std::filesystem::path store_path = zipline::ZiplineStore::DefaultPath();
+    const std::filesystem::path routes_path = zipline::ZiplineRoutes::DefaultPath();
     const auto frames_now = file_stamp(frames_path);
     const auto store_now = file_stamp(store_path);
+    const auto routes_now = file_stamp(routes_path);
 
     std::lock_guard<std::mutex> lock(mutex);
-    if (cached && frames_now == frames_stamp && store_now == store_stamp) {
+    if (cached && frames_now == frames_stamp && store_now == store_stamp && routes_now == routes_stamp) {
         return cached;
     }
 
     auto reloaded = std::make_shared<ZiplineData>();
     const bool frames_ok = reloaded->frames.load(frames_path);
     const bool store_ok = reloaded->store.load(store_path);
+    // 手工路径坏了只丢掉这份可选项, 不该让整条滑索寻路失效
+    reloaded->routes.load(routes_path);
     reloaded->ok = frames_ok && store_ok;
     cached = std::move(reloaded);
     frames_stamp = frames_now;
     store_stamp = store_now;
+    routes_stamp = routes_now;
     return cached;
 }
 
@@ -282,6 +290,53 @@ constexpr double minimum_possible_world_span_squared(
     const double dx = std::max(absolute_value(anchor_delta_x) - uncertainty_x, 0.0);
     const double dz = std::max(absolute_value(anchor_delta_z) - uncertainty_z, 0.0);
     return dx * dx + delta_y * delta_y + dz * dz;
+}
+
+// 失败过的跳两个方向一起算, 手工路径也要让开, 否则每轮都先撞同一个错
+bool hop_is_banned(const std::vector<zipline::ZiplineNode>& nodes, const HopLedger& ledger, size_t a, size_t b)
+{
+    const auto near_tower = [&nodes](size_t tower, const ZiplineNodeRef& ref) {
+        return std::hypot(nodes[tower].x - ref.x, nodes[tower].y - ref.y) <= kZiplineHopBanMatchWu;
+    };
+    int32_t aim_failures = 0;
+    for (const ZiplineHopRecord& record : ledger) {
+        const bool rope_failure = IsZiplineRopeFailure(record.outcome);
+        if (!rope_failure && record.outcome != HopOutcome::AimFailed) {
+            continue;
+        }
+        const ZiplineNodeRef& from = record.plan.mount;
+        const ZiplineNodeRef& to = record.plan.landing;
+        if (!((near_tower(a, from) && near_tower(b, to)) || (near_tower(a, to) && near_tower(b, from)))) {
+            continue;
+        }
+        if (rope_failure || ++aim_failures >= kZiplineAimFailBanCount) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// 和 build_links 的几何部分同源, 只用来给手工链补备选架子, 不参与遮挡判定
+bool towers_may_link(
+    const std::vector<zipline::ZiplineNode>& nodes,
+    const std::vector<size_t>& node_map,
+    const std::vector<double>& span_limit,
+    const std::vector<std::array<int, 2>>& footprints,
+    size_t a,
+    size_t b)
+{
+    if (a == b || node_map[a] != node_map[b] || nodes[a].level_id != nodes[b].level_id || span_limit[a] <= 0.0
+        || span_limit[b] <= 0.0) {
+        return false;
+    }
+    const double limit = std::min(span_limit[a], span_limit[b]);
+    const double span_squared = minimum_possible_world_span_squared(
+        nodes[b].world_x - nodes[a].world_x,
+        nodes[b].world_y - nodes[a].world_y,
+        nodes[b].world_z - nodes[a].world_z,
+        footprints[a],
+        footprints[b]);
+    return span_squared <= limit * limit;
 }
 
 // BaseNavRouteResult::cost 是搜索代价, 和几何长度不能混用
@@ -671,10 +726,19 @@ std::optional<ZiplineRoute> PlanZiplineRoute(
         return no_zipline("no powered ziplines recorded in this zone", &g_zipline_no_data);
     }
 
+    // 手工路径按 (区, 终点) 命中; 起点由本次实际位置决定, 不参与匹配
+    const zipline::ZiplineSavedRoute* saved_route =
+        data->routes.find(param.zipline_account_id, navmesh_zone, goal.x, goal.y, goal_deck_y);
+    if (saved_route != nullptr) {
+        LogInfo << "ZiplineRoute: an edited path matches this leg." << VAR(navmesh_zone) << VAR(goal.x) << VAR(goal.y)
+                << VAR(saved_route->label) << VAR(saved_route->towers.size());
+    }
+
     const zipline::ZiplineCostModel& cost = data->frames.cost();
     const double baseline_length = walking_baseline_available ? polyline_length(*walking_path) : 0.0;
     const double gain_threshold = walking_baseline_available ? baseline_length - cost.min_gain : std::numeric_limits<double>::infinity();
-    if (walking_baseline_available && gain_threshold <= cost.mount_penalty) {
+    // 手工路径是用户的明确选择, 不再按步行成本否决, 只在走不通时回退
+    if (walking_baseline_available && saved_route == nullptr && gain_threshold <= cost.mount_penalty) {
         return no_zipline("the walk is too short for any zipline to pay off", &g_zipline_not_chosen);
     }
 
@@ -768,10 +832,213 @@ std::optional<ZiplineRoute> PlanZiplineRoute(
 
     // 未登记的架子类型索长上限为 0, 不参与配对
     std::vector<double> span_limit(nodes.size());
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        span_limit[i] = data->frames.maxSpan(nodes[i].template_id);
+    }
+
+    bool truncated = false;
+    bool interrupted = false;
+
+    const auto plan_approach_leg = [&](size_t index) -> std::optional<PlannedLeg> {
+        NavmeshRouteDiagnostic diagnostic;
+        auto route = PlanNavmeshRoute(
+            param,
+            locator_zone,
+            {
+                .start = start,
+                .start_floor_y = start_floor_y,
+                .start_deck_y = start_deck_y,
+                .goal = spots[index],
+                .goal_deck_y = nodes[spot_tower[index]].height,
+            },
+            capture_diagnostics ? &diagnostic : nullptr);
+        if (!route || !route->ok()) {
+            return std::nullopt;
+        }
+        return PlannedLeg {
+            .path = route->path,
+            .length = polyline_length(route->path),
+            .diagnostic = std::move(diagnostic),
+        };
+    };
+
+    const auto plan_departure_leg = [&](size_t index) -> std::optional<PlannedLeg> {
+        NavmeshRouteDiagnostic diagnostic;
+        auto route = PlanNavmeshRoute(
+            param,
+            locator_zone,
+            {
+                .start = spots[index],
+                .start_floor_y = nodes[spot_tower[index]].height,
+                .goal = goal,
+                .goal_deck_y = goal_deck_y,
+            },
+            capture_diagnostics ? &diagnostic : nullptr);
+        if (!route || !route->ok()) {
+            return std::nullopt;
+        }
+        return PlannedLeg {
+            .path = route->path,
+            .length = polyline_length(route->path),
+            .diagnostic = std::move(diagnostic),
+        };
+    };
+
+    // 规划通一个站点就停, 预算用完返回 nullptr
+    const auto first_leg = [](LegCache& cache, const std::vector<size_t>& candidates_of_tower, size_t* used_spot) {
+        const std::optional<PlannedLeg>* leg = nullptr;
+        for (const size_t spot : candidates_of_tower) {
+            leg = cache.get(spot);
+            *used_spot = spot;
+            if (leg == nullptr || leg->has_value()) {
+                break;
+            }
+        }
+        return leg;
+    };
+
+    // 手工路径只认 (区, 终点) 与账号, 起点由本次实际位置决定
+    const auto use_edited_path = [&]() -> std::optional<ZiplineRoute> {
+        const zipline::ZiplineSavedRoute& saved = *saved_route;
+        std::vector<size_t> chain;
+        chain.reserve(saved.towers.size());
+        for (const zipline::ZiplineMark& tower : saved.towers) {
+            size_t hit = kNoTower;
+            double nearest = kZiplineTowerIdentityWu;
+            for (size_t i = 0; i < nodes.size(); ++i) {
+                if (!tower.level_id.empty() && nodes[i].level_id != tower.level_id) {
+                    continue;
+                }
+                const double distance =
+                    std::hypot(nodes[i].world_x - tower.x, nodes[i].world_y - tower.y, nodes[i].world_z - tower.z);
+                if (distance <= nearest) {
+                    nearest = distance;
+                    hit = i;
+                }
+            }
+            if (hit == kNoTower) {
+                LogWarn << "ZiplineRoute: the edited path names a tower that is not in the powered records." << VAR(tower.level_id)
+                        << VAR(tower.x) << VAR(tower.y) << VAR(tower.z);
+                return std::nullopt;
+            }
+            chain.push_back(hit);
+        }
+        if (chain.size() < 2) {
+            return std::nullopt;
+        }
+        for (size_t hop = 0; hop + 1 < chain.size(); ++hop) {
+            if (chain[hop] == chain[hop + 1]) {
+                LogWarn << "ZiplineRoute: the edited path visits the same tower twice in a row." << VAR(hop);
+                return std::nullopt;
+            }
+            if (!towers_may_link(nodes, node_map, span_limit, footprints, chain[hop], chain[hop + 1])) {
+                LogWarn << "ZiplineRoute: the edited path contains a hop the records cannot connect." << VAR(hop)
+                        << VAR(nodes[chain[hop]].x) << VAR(nodes[chain[hop]].y) << VAR(nodes[chain[hop + 1]].x)
+                        << VAR(nodes[chain[hop + 1]].y);
+                return std::nullopt;
+            }
+            if (hop_is_banned(nodes, param.zipline_ledger, chain[hop], chain[hop + 1])) {
+                LogWarn << "ZiplineRoute: the edited path reuses a hop this run already dropped." << VAR(hop)
+                        << VAR(nodes[chain[hop]].x) << VAR(nodes[chain[hop]].y) << VAR(nodes[chain[hop + 1]].x)
+                        << VAR(nodes[chain[hop + 1]].y);
+                return std::nullopt;
+            }
+        }
+        if (board_spots[chain.front()].empty() || land_spots[chain.back()].empty()) {
+            LogWarn << "ZiplineRoute: the edited path starts or ends on a tower unreachable from this leg." << VAR(nodes[chain.front()].x)
+                    << VAR(nodes[chain.front()].y) << VAR(nodes[chain.back()].x) << VAR(nodes[chain.back()].y);
+            return std::nullopt;
+        }
+
+        size_t saved_budget = kMaxExtraPlans;
+        LegCache saved_approach_cache(plan_approach_leg, saved_budget);
+        LegCache saved_departure_cache(plan_departure_leg, saved_budget);
+        size_t approach_spot = 0;
+        const std::optional<PlannedLeg>* approach = first_leg(saved_approach_cache, board_spots[chain.front()], &approach_spot);
+        if (approach == nullptr) {
+            return std::nullopt;
+        }
+        if (!approach->has_value()) {
+            LogWarn << "ZiplineRoute: cannot walk to the first tower of the edited path." << VAR(nodes[chain.front()].x)
+                    << VAR(nodes[chain.front()].y);
+            return std::nullopt;
+        }
+
+        size_t departure_spot = 0;
+        const std::optional<PlannedLeg>* departure =
+            first_leg(saved_departure_cache, land_spots[chain.back()], &departure_spot);
+        if (departure == nullptr) {
+            return std::nullopt;
+        }
+        if (!departure->has_value()) {
+            LogWarn << "ZiplineRoute: cannot walk from the last tower of the edited path to the goal." << VAR(nodes[chain.back()].x)
+                    << VAR(nodes[chain.back()].y) << VAR(goal.x) << VAR(goal.y);
+            return std::nullopt;
+        }
+
+        ZiplineRoute route {
+            .approach = (*approach)->path,
+            .departure = (*departure)->path,
+        };
+        double zip_cost = cost.mount_penalty - cost.transfer_penalty;
+        for (size_t hop = 0; hop + 1 < chain.size(); ++hop) {
+            zip_cost += planar_distance(to_world(nodes[chain[hop]]), to_world(nodes[chain[hop + 1]])) * cost.speed_ratio
+                        + cost.transfer_penalty;
+        }
+        route.cost = (*approach)->length + zip_cost + (*departure)->length;
+        for (const size_t index : chain) {
+            route.towers.push_back(nodes[index]);
+        }
+        route.hop_alternates.resize(chain.size() - 1);
+        for (size_t hop = 0; hop + 1 < chain.size(); ++hop) {
+            for (size_t other = 0; other < nodes.size(); ++other) {
+                if (other == chain[hop] || other == chain[hop + 1]) {
+                    continue;
+                }
+                if (towers_may_link(nodes, node_map, span_limit, footprints, chain[hop], other)) {
+                    route.hop_alternates[hop].push_back(nodes[other]);
+                }
+            }
+        }
+        if (capture_diagnostics) {
+            route.diagnostics.push_back((*approach)->diagnostic);
+            route.diagnostics.push_back((*departure)->diagnostic);
+        }
+        const navmesh::WorldPoint& approach_from =
+            route.approach.points.size() >= 2 ? route.approach.points[route.approach.points.size() - 2] : start;
+        route.mount_spots = mount_spots(
+            param,
+            locator_zone,
+            *frame,
+            route.towers.front(),
+            data->frames.footprint(route.towers.front().template_id),
+            approach_from,
+            supply_points);
+        // 沿用自动选择那条日志的字段名, 日志分析工具才能照常还原这次滑索方案
+        const ZiplineRoute* best = &route;
+        LogInfo << "ZiplineRoute: picked the edited path." << VAR(walking_baseline_available) << VAR(baseline_length)
+                << VAR(best->cost) << VAR(best->towers.size()) << VAR(best->towers.front().x) << VAR(best->towers.front().y)
+                << VAR(best->towers.back().x) << VAR(best->towers.back().y);
+        return route;
+    };
+
+    if (saved_route != nullptr) {
+        if (std::optional<ZiplineRoute> edited = use_edited_path()) {
+            g_zipline_used = true;
+            return edited;
+        }
+        LogWarn << "ZiplineRoute: the edited path does not fit this leg, searching instead." << VAR(navmesh_zone) << VAR(goal.x)
+                << VAR(goal.y);
+    }
+
+    // 手工路径失败不占自动搜索的预算, 否则一条过期的编辑会让正常回退也搜不出东西
+    size_t plan_budget = kMaxExtraPlans;
+    LegCache approach_cache(plan_approach_leg, plan_budget);
+    LegCache departure_cache(plan_departure_leg, plan_budget);
+
     std::vector<double> lb_from_start(nodes.size(), std::numeric_limits<double>::infinity());
     std::vector<double> lb_to_goal(nodes.size(), std::numeric_limits<double>::infinity());
     for (size_t i = 0; i < nodes.size(); ++i) {
-        span_limit[i] = data->frames.maxSpan(nodes[i].template_id);
         for (const size_t spot : board_spots[i]) {
             lb_from_start[i] = std::min(lb_from_start[i], planar_distance(start, spots[spot]));
         }
@@ -837,30 +1104,14 @@ std::optional<ZiplineRoute> PlanZiplineRoute(
 
     // 索不分上下行, 失败的跳两个方向一起封
     if (!param.zipline_ledger.empty()) {
-        const auto near_tower = [&nodes](size_t tower, const ZiplineNodeRef& ref) {
-            return std::hypot(nodes[tower].x - ref.x, nodes[tower].y - ref.y) <= kZiplineHopBanMatchWu;
-        };
         std::vector<std::pair<size_t, size_t>> banned;
         for (size_t i = 0; i < graph.all.size(); ++i) {
             for (const size_t j : graph.all[i]) {
                 if (j <= i) {
                     continue;
                 }
-                int32_t aim_failures = 0;
-                for (const ZiplineHopRecord& record : param.zipline_ledger) {
-                    const bool rope_failure = IsZiplineRopeFailure(record.outcome);
-                    if (!rope_failure && record.outcome != HopOutcome::AimFailed) {
-                        continue;
-                    }
-                    const ZiplineNodeRef& from = record.plan.mount;
-                    const ZiplineNodeRef& to = record.plan.landing;
-                    if (!((near_tower(i, from) && near_tower(j, to)) || (near_tower(i, to) && near_tower(j, from)))) {
-                        continue;
-                    }
-                    if (rope_failure || ++aim_failures >= kZiplineAimFailBanCount) {
-                        banned.emplace_back(i, j);
-                        break;
-                    }
+                if (hop_is_banned(nodes, param.zipline_ledger, i, j)) {
+                    banned.emplace_back(i, j);
                 }
             }
         }
@@ -913,77 +1164,11 @@ std::optional<ZiplineRoute> PlanZiplineRoute(
         return a.lower_bound < b.lower_bound;
     });
 
-    size_t plan_budget = kMaxExtraPlans;
-
-    LegCache approach_cache(
-        [&](size_t index) -> std::optional<PlannedLeg> {
-            NavmeshRouteDiagnostic diagnostic;
-            auto route = PlanNavmeshRoute(
-                param,
-                locator_zone,
-                {
-                    .start = start,
-                    .start_floor_y = start_floor_y,
-                    .start_deck_y = start_deck_y,
-                    .goal = spots[index],
-                    .goal_deck_y = nodes[spot_tower[index]].height,
-                },
-                capture_diagnostics ? &diagnostic : nullptr);
-            if (!route || !route->ok()) {
-                return std::nullopt;
-            }
-            return PlannedLeg {
-                .path = route->path,
-                .length = polyline_length(route->path),
-                .diagnostic = std::move(diagnostic),
-            };
-        },
-        plan_budget);
-
-    LegCache departure_cache(
-        [&](size_t index) -> std::optional<PlannedLeg> {
-            NavmeshRouteDiagnostic diagnostic;
-            auto route = PlanNavmeshRoute(
-                param,
-                locator_zone,
-                {
-                    .start = spots[index],
-                    .start_floor_y = nodes[spot_tower[index]].height,
-                    .goal = goal,
-                    .goal_deck_y = goal_deck_y,
-                },
-                capture_diagnostics ? &diagnostic : nullptr);
-            if (!route || !route->ok()) {
-                return std::nullopt;
-            }
-            return PlannedLeg {
-                .path = route->path,
-                .length = polyline_length(route->path),
-                .diagnostic = std::move(diagnostic),
-            };
-        },
-        plan_budget);
-
-    // 规划通一个站点就停, 预算用完返回 nullptr
-    const auto first_leg = [](LegCache& cache, const std::vector<size_t>& candidates_of_tower, size_t* used_spot) {
-        const std::optional<PlannedLeg>* leg = nullptr;
-        for (const size_t spot : candidates_of_tower) {
-            leg = cache.get(spot);
-            *used_spot = spot;
-            if (leg == nullptr || leg->has_value()) {
-                break;
-            }
-        }
-        return leg;
-    };
-
     double best_cost = gain_threshold;
     std::optional<ZiplineRoute> best;
     std::optional<Candidate> best_candidate;
     size_t best_approach_spot = 0;
     size_t best_departure_spot = 0;
-    bool truncated = false;
-    bool interrupted = false;
 
     // 先只比确定边候选, 都走不通才比不确定的, 混在一起比会让便宜的不确定直索赢
     const auto evaluate = [&](bool want_certain) {

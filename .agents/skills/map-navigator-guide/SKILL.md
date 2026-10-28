@@ -106,6 +106,7 @@ description: MaaEnd 自动寻路、地图定位、角色移动与路径导航开
 
 - `web/serve.py`：FastAPI 后端，托管静态站点并提供寻路 / 导入导出 / 录制 WebSocket 接口；
 - `web/static/`：浏览器前端（原生 JS + JSDoc + WebGL，ESM 模块，零构建）；
+- `web/static/zipline_routes.html` 与 `web/static/js/zipline_routes.js`：按地区-送货点编辑手工滑索链的独立页面，保存到 `install/debug/record/ZiplineRoutes.json`，运行时由 cpp-algo 的 `ZiplineRoutes` / `PlanZiplineRoute` 直接采用；
 - `navmesh_backend.py`：navmesh 查询后端，把 cpp-algo agent 当作常驻查询进程，几何解码 / 吸附 / 路线都在 agent 里算；
 - `connectors.py` / `connection_models.py`：Win32 / ADB / PlayCover 录制连接层；
 - `agent_session.py`：cpp Agent + Tasker 的生命周期，录制 / 试跑 / 单次定位 / navmesh 查询共用；
