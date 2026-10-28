@@ -586,6 +586,10 @@ Floor snapping is worth calling out separately: on multi-floor maps, triangle fa
 
 When all checks pass, the chain is returned directly, skipping candidate enumeration, occlusion queries, and the `min_gain` cost veto — the manual path is the user's explicit choice. If any check fails, the reason is logged and the original search runs instead, so deleting the file or re-importing coordinates does not require any cleanup. On success the log contains both `ZiplineRoute: picked the edited path.` and the usual `Expanded NAVMESH waypoint via zipline.`, and the log analysis tool reconstructs the plan from the existing fields.
 
+#### Forced zipline account
+
+The Seize Delivery Jobs task's `Force zipline account` input accepts a 16-character hexadecimal `account_id`. cpp-algo's `ResolveZiplineAccountId` reads the `MapNavigatorZiplineAccount` node first; when it contains a valid value, the planner uses that account's zipline records **whether the current UID is unknown or a different UID was detected**. Leave it empty to keep the automatic detection. If the account has no entry in `Ziplines.json`, planning still falls back because no usable records exist.
+
 The file looks like this; `towers` has at least two entries in ride order. `goal` is a navmesh base-pixel coordinate and `towers` use world coordinates so numbering changes after a re-import do not matter. The values below only illustrate the fields and are not usable data:
 
 ```json
