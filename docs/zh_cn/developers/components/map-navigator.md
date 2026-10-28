@@ -586,9 +586,9 @@ uv run map-navigator --port 9000 --no-browser
 
 全部成立时直接返回这条链，跳过候选枚举、遮挡查询和 `min_gain` 成本否决——手工路径是用户的明确选择。任一步不成立都会记录原因并退回原来的自动查找，所以删除或重新导入坐标后不需要清理旧文件。成功时日志会同时输出 `ZiplineRoute: picked the edited path.` 与常规的 `Expanded NAVMESH waypoint via zipline.`，日志分析工具按既有字段还原这次方案。
 
-#### 强制滑索账号
+#### 强制第一份滑索数据
 
-抢委托送货任务的 `强制滑索账号` 输入框可以填 16 位十六进制 `account_id`。cpp-algo 的 `ResolveZiplineAccountId` 会先读取 `MapNavigatorZiplineAccount` 节点；有有效值时直接使用该账号的滑索记录，**无论当前 UID 没有识别出来，还是识别到了另一个 UID**。留空则保持原来的自动识别逻辑。账号不存在于 `Ziplines.json` 时，规划仍会因为没有可用记录而回退。
+抢委托送货任务的 `强制使用第一份滑索数据` 开关开启后，cpp-algo 的 `ResolveZiplineAccountId` 会先读取 `MapNavigatorZiplineAccount` 节点；`force_first` 为真时直接使用 `Ziplines.json` 里已有的第一份滑索账号数据，**无论当前 UID 没有识别出来，还是识别到了另一个 UID**。关闭时保持原来的自动识别逻辑。没有已保存账号时仍会回退到当前 UID；账号不存在于 `Ziplines.json` 时则因为没有可用记录而回退。
 
 文件结构如下，`towers` 至少两根、按乘坐顺序排列；`goal` 是 navmesh base 像素坐标，`towers` 用世界坐标，避免重新导入后编号变化。下面只示意字段，坐标不是可直接使用的数据：
 

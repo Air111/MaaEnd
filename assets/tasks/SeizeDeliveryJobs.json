@@ -27,7 +27,7 @@
             "option": [
                 "SeizeDeliveryJobsReward",
                 "SeizeDeliveryJobsRefreshLimit",
-                "SeizeDeliveryJobsZiplineAccount",
+                "SeizeDeliveryJobsForceZiplineAccount",
                 "SeizeDeliveryJobsCommissionSource",
                 "SeizeDeliveryJobsPostProcessing"
             ]
@@ -733,27 +733,26 @@
                 }
             }
         },
-        "SeizeDeliveryJobsZiplineAccount": {
-            "type": "input",
-            "label": "$task.SeizeDeliveryJobsZiplineAccount.label",
-            "description": "$task.SeizeDeliveryJobsZiplineAccount.description",
-            "inputs": [
+        "SeizeDeliveryJobsForceZiplineAccount": {
+            "type": "switch",
+            "label": "$task.SeizeDeliveryJobsForceZiplineAccount.label",
+            "description": "$task.SeizeDeliveryJobsForceZiplineAccount.description",
+            "cases": [
                 {
-                    "name": "AccountId",
-                    "label": "$task.SeizeDeliveryJobsZiplineAccount.inputs.AccountId.label",
-                    "default": "",
-                    "pipeline_type": "string",
-                    "verify": "^([0-9a-fA-F]{16})?$",
-                    "pattern_msg": "$task.SeizeDeliveryJobsZiplineAccount.inputs.AccountId.pattern_msg"
-                }
-            ],
-            "pipeline_override": {
-                "MapNavigatorZiplineAccount": {
-                    "attach": {
-                        "account_id": "{AccountId}"
+                    "name": "No"
+                },
+                {
+                    "name": "Yes",
+                    "pipeline_override": {
+                        "MapNavigatorZiplineAccount": {
+                            "attach": {
+                                "force_first": true
+                            }
+                        }
                     }
                 }
-            }
+            ],
+            "default_case": "No"
         },
         "SeizeDeliveryJobsRepeatCount": {
             "type": "select",
