@@ -4,7 +4,7 @@
         {
             "name": "SeizeDeliveryJobs",
             "label": "$task.SeizeDeliveryJobs.label",
-            "entry": "SeizeDeliveryJobsMain",
+            "entry": "SeizeDeliveryJobsCaptureUid",
             "description": "$task.SeizeDeliveryJobs.description",
             "group": [
                 "regional_development"
@@ -30,6 +30,7 @@
             "option": [
                 "SeizeDeliveryJobsReward",
                 "SeizeDeliveryJobsRefreshLimit",
+                "SeizeDeliveryJobsForceZiplineAccount",
                 "SeizeDeliveryJobsCommissionSource",
                 "SeizeDeliveryJobsPostProcessing"
             ]
@@ -352,6 +353,27 @@
                 }
             ],
             "default_case": "3"
+        },
+        "SeizeDeliveryJobsForceZiplineAccount": {
+            "type": "switch",
+            "label": "$task.SeizeDeliveryJobsForceZiplineAccount.label",
+            "description": "$task.SeizeDeliveryJobsForceZiplineAccount.description",
+            "cases": [
+                {
+                    "name": "No"
+                },
+                {
+                    "name": "Yes",
+                    "pipeline_override": {
+                        "MapNavigatorZiplineAccount": {
+                            "attach": {
+                                "force_first": true
+                            }
+                        }
+                    }
+                }
+            ],
+            "default_case": "No"
         }
     }
 }
