@@ -95,7 +95,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
         if path == "/":
@@ -114,7 +114,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
         super().do_GET()
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         if urlparse(self.path).path != "/api/zipline-routes":
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
             return
@@ -139,7 +139,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
         self._send_json(HTTPStatus.OK, _routes_payload(include_targets=False))
 
-    def do_DELETE(self) -> None:  # noqa: N802
+    def do_DELETE(self) -> None:
         parsed = urlparse(self.path)
         if parsed.path != "/api/zipline-routes":
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
