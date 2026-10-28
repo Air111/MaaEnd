@@ -227,6 +227,7 @@ After you click `停止录制` (Stop Recording), the tool organizes the raw traj
 - Zipline toggle: after checking `滑索规划` (Zipline Planning) in the sidebar, preview, copy, and live test runs all carry the route-level `zip: true`. When there is no zipline data or the zipline cost has no advantage, it falls back to walking according to the runtime rules.
 - Zipline pylon layer: `路径编辑` (Path Editing), `断言` (Assert), and `日志分析` (Log Analysis) share the `滑索架` (Zipline Pylons) toggle in `图层` (Layers). `路径编辑` and `断言` show the records of the current installation directory, while `日志分析` shows the zipline pylons in the current selection and in the ZIP snapshot of the same group; in all three 2D modes you can click a zipline pylon to see its basemap / world coordinates, navigation height, template, and Level, and they share the A / B selection, the possible-center span, and the geometric connectivity check. The layer is independent of the route-level zipline toggle and does not change preview parameters, copied content, or live test runs; recorded candidates may be unpowered or already excluded by the runtime, and being geometrically connectable does not mean being actually usable.
 - Multi-account ziplines: official-map imports derive a pseudonymous account identity from the `/map/mark/list` `roleId`; game runs derive the same identity from the UID captured once during scene initialization. Runtime planning filters by account before map. Legacy records without an account field are not attributed at import time: when zipline navigation runs, the current account claims them — if that account has no records of its own yet, the legacy coordinates are attributed to it wholesale and persisted in place, so nothing has to be imported again after an upgrade; if the account already has records of its own, nothing is claimed, so two sets of coordinates never mix and then silently go wrong after an account switch. A successful claim is announced to the user; see `ZiplineStore::claimLegacyRecords`. Offline route preview cannot read the in-game UID, so you can choose an imported pseudonymous account in the account drop-down next to `滑索规划` (Zipline Planning); it defaults to the most recently imported one and the choice is remembered in the browser. The choice also filters the current installation's zipline pylon layer, but is never copied into route parameters and never overrides the account detected during a live run. `日志分析` (Log Analysis) still filters snapshots by the account identity recorded in the matching run. Windows imports run in the cpp-algo embedded browser; on Linux, `agent/go-service/ziplineimport` captures the same endpoint through a local restricted MITM proxy, derives the account identity from the request URL's `roleId`, and stores records under `(account_id, map_id)` as well; an import that sees more than one `roleId` is rejected as a whole. Windows always clears the embedded browser site session before each import; Linux uses a throwaway Firefox profile on every import, so the session is never kept either.
+- Manual zipline paths: `滑索路线` (Zipline Routes) in the map toolbar opens a standalone page at `/zipline_routes.html`. It lists "area - delivery point" entries from AutoDelivery's `zip_route_node` and their required `NAVMESH` legs, reads the current installation's `debug/record/Ziplines.json` and the repository's `data/MapNavigator/zipline_frames.json`, and numbers the pylons in record order. Click a number or type a comma-separated sequence to build the chain from start to end; only powered, geometrically connectable pylons can be saved. The result is stored at `debug/record/ZiplineRoutes.json`, keyed by `(account_id, zone_name, goal)`; `goal` is a base-map pixel coordinate and `towers` are world coordinates, so re-importing the Ziplines record still resolves the same pylons. See [Manual zipline paths](#manual-zipline-paths).
 
 Usually, the only fine-tuning you really need to do is:
 
@@ -574,6 +575,53 @@ Floor snapping is worth calling out separately: on multi-floor maps, triangle fa
 > [!NOTE]
 >
 > The path editor's planning preview directly calls the C++ route expansion logic used by `MapNavigateAction` and reads the same `base.nav.gz`. The preview does not implement a separate routing algorithm in JavaScript; actual execution is still affected by localization, terrain, and in-game conditions, so the outer Pipeline still needs failure fallback.
+
+### Manual zipline paths
+
+`debug/record/ZiplineRoutes.json` stores the zipline chains users pin to delivery points. The editor upserts by `(account_id, zone_name, goal)`; at runtime, after loading the powered pylons of the current account and zone, `PlanZiplineRoute` finds the matching entry by `navmesh_zone`, interval goal (within 1 pixel), and `goal_deck_y` (within 1 meter), then resolves every world coordinate back to the current records (same `level_id`, 3D distance at most 2 world units). Once resolved, it checks in order:
+
+- both adjacent hops are in the same `Ziplines.json` record and the `max_span` of the two types permits the rope;
+- neither hop appears in this run's failure ledger;
+- the first tower is walkable to and the last tower can reach the interval goal; the approach and departure legs are still planned by the navmesh.
+
+When all checks pass, the chain is returned directly, skipping candidate enumeration, occlusion queries, and the `min_gain` cost veto — the manual path is the user's explicit choice. If any check fails, the reason is logged and the original search runs instead, so deleting the file or re-importing coordinates does not require any cleanup. On success the log contains both `ZiplineRoute: picked the edited path.` and the usual `Expanded NAVMESH waypoint via zipline.`, and the log analysis tool reconstructs the plan from the existing fields.
+
+The file looks like this; `towers` has at least two entries in ride order. `goal` is a navmesh base-pixel coordinate and `towers` use world coordinates so numbering changes after a re-import do not matter. The values below only illustrate the fields and are not usable data:
+
+```json
+{
+    "version": 1,
+    "routes": [
+        {
+            "account_id": "<pseudonymous account>",
+            "zone_name": "map01base",
+            "label": "源石研究园 · 英格",
+            "goal": [1132.831, 900.497],
+            "goal_deck_y": 90.519,
+            "towers": [
+                {
+                    "level_id": "map01_lv005",
+                    "template_id": "5d53bdb714ba42c1e1a1b748b55b686f",
+                    "x": 0.0,
+                    "y": 0.0,
+                    "z": 0.0
+                },
+                {
+                    "level_id": "map01_lv005",
+                    "template_id": "5d53bdb714ba42c1e1a1b748b55b686f",
+                    "x": 50.0,
+                    "y": 0.0,
+                    "z": 0.0
+                }
+            ]
+        }
+    ]
+}
+```
+
+Manual paths only apply to intervals with a stable endpoint, such as area-to-delivery-point legs; the start still comes from the live position, so the same chain can be reused from different depots. It is not part of the authored `path`, does not change `required` boundaries, and never crosses an interval endpoint.
+
+The main tool's `滑索规划` (Zipline Planning) preview calls the same `PlanZiplineRoute`, so after saving you can confirm the approach and departure legs of this chain on the path editing page.
 
 ### Rope lifts
 
