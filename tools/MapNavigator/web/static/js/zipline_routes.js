@@ -30,6 +30,7 @@ const els = {
   account: $("account"),
   target: $("target"),
   targetInfo: $("target-info"),
+  routeSummary: $("route-summary"),
   sequence: $("sequence"),
   chips: $("chips"),
   chainCount: $("chain-count"),
@@ -563,6 +564,7 @@ function drawTowers() {
     if (isSelected) {
       const order = state.chain.indexOf(tower.index) + 1;
       drawLabel(cx, cy - 25, `第 ${order} 站`, "#22d3ee");
+      if (order === 1) drawLabel(cx, cy - 42, "起点", "#4ade80");
     }
   }
   // 未供电的架子在低缩放下也要能看出异常, 画一条短灰线
@@ -625,6 +627,21 @@ function updateChainUi() {
   els.clear.disabled = !state.chain.length;
   els.save.disabled = !state.target || !state.accountId || !validation.ok || state.busy;
   els.delete.disabled = !state.savedRoute || state.busy;
+  updateRouteSummary();
+}
+
+function updateRouteSummary() {
+  if (!state.target) {
+    els.routeSummary.textContent = "起点：选择第一根滑索架后显示；终点：选择送货点后显示。";
+    return;
+  }
+  const goal = Array.isArray(state.target.goal) ? state.target.goal : [0, 0];
+  const goalText = `[${Number(goal[0]).toFixed(2)}, ${Number(goal[1]).toFixed(2)}]`;
+  const first = state.chain.length ? towerByIndex(state.chain[0]) : null;
+  const startText = first
+    ? `#${first.index} 世界 [${first.world.map((value) => Number(value).toFixed(1)).join(", ")}]`
+    : "未选择";
+  els.routeSummary.textContent = `${state.target.zone_name} · 起点 ${startText} → 终点 ${goalText}`;
 }
 
 function renderChips() {
