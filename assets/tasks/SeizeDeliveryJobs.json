@@ -27,6 +27,7 @@
             "option": [
                 "SeizeDeliveryJobsReward",
                 "SeizeDeliveryJobsRefreshLimit",
+                "SeizeDeliveryJobsZiplineAccount",
                 "SeizeDeliveryJobsCommissionSource",
                 "SeizeDeliveryJobsPostProcessing"
             ]
@@ -729,6 +730,28 @@
             "pipeline_override": {
                 "SeizeDeliveryJobsRefreshHit": {
                     "max_hit": "{Limit}"
+                }
+            }
+        },
+        "SeizeDeliveryJobsZiplineAccount": {
+            "type": "input",
+            "label": "$task.SeizeDeliveryJobsZiplineAccount.label",
+            "description": "$task.SeizeDeliveryJobsZiplineAccount.description",
+            "inputs": [
+                {
+                    "name": "AccountId",
+                    "label": "$task.SeizeDeliveryJobsZiplineAccount.inputs.AccountId.label",
+                    "default": "",
+                    "pipeline_type": "string",
+                    "verify": "^([0-9a-fA-F]{16})?$",
+                    "pattern_msg": "$task.SeizeDeliveryJobsZiplineAccount.inputs.AccountId.pattern_msg"
+                }
+            ],
+            "pipeline_override": {
+                "MapNavigatorZiplineAccount": {
+                    "attach": {
+                        "account_id": "{AccountId}"
+                    }
                 }
             }
         },

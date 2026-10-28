@@ -1,0 +1,8 @@
+{
+    "MapNavigatorZiplineAccount": {
+        "desc": "强制滑索账号。只承载设置项写入的 account_id，寻路开始前读一次，不会被执行",
+        "attach": {
+            "account_id": ""
+        }
+    }
+}
