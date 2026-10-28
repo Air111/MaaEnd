@@ -1,9 +1,27 @@
 import ctypes
+import importlib
+import os
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import runtime
+
+
+class InstallDirOverrideTest(unittest.TestCase):
+    def test_mapnav_install_dir_overrides_the_repo_install_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(os.environ, {"MAPNAV_INSTALL_DIR": temp_dir}):
+                reloaded = importlib.reload(runtime)
+
+            self.assertEqual(reloaded.INSTALL_DIR, Path(temp_dir).resolve())
+            self.assertEqual(reloaded.AGENT_DIR, Path(temp_dir).resolve() / "agent")
+            self.assertEqual(reloaded.MAAFW_BIN_DIR, Path(temp_dir).resolve() / "maafw")
+
+        # 其他测试继续使用默认路径
+        importlib.reload(runtime)
 
 
 class MaaRuntimeLoadingTest(unittest.TestCase):
