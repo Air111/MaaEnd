@@ -12,9 +12,8 @@
         <header class="panel-head">
           <div>
             <h1>滑索路线</h1>
-            <p id="page-sub" class="sub">按地区-送货点固定一条手工滑索链</p>
+            <p class="sub">按地区-送货点固定一条手工滑索链</p>
           </div>
-          <a id="back-link" class="back" href="./">返回地图工具</a>
         </header>
 
         <div id="notice" class="notice" hidden></div>
@@ -68,9 +67,7 @@
         </section>
 
         <section class="block hint">
-          <p id="blank-hint" hidden>
-            这是空画布相对位置视图，不需要连接游戏，也不需要底图；滑索架按世界坐标的相对位置缩放显示。
-          </p>
+          <p>底图只显示当前送货点所在地区；滑索架与终点使用同一套 base 像素坐标，底图已与它们对齐。</p>
           <p>紫色圆点是已记录的滑索架，灰色圆点未通电、运行时会被跳过。只有供电且几何可连接的编号才能保存。</p>
           <p>
             保存后，运行时只在这个送货点的规划区间直接按手工链走；换账号、重新导入坐标导致架子认不回、某跳走不通或本轮已失败时，会自动回退到查找。
