@@ -23,7 +23,16 @@ namespace
 constexpr const char* kPreferenceNode = "MapNavigatorZiplinePreference";
 constexpr const char* kAccountIdentityNode = "CurrentAccountIdentity";
 constexpr const char* kCaptureUidNode = "MapNavigatorZiplineCaptureUid";
+constexpr const char* kAccountOverrideNode = "MapNavigatorZiplineAccount";
 constexpr size_t kAccountIdLength = 16;
+
+bool is_valid_account_id(const std::string& account_id)
+{
+    return account_id.size() == kAccountIdLength
+           && std::all_of(account_id.begin(), account_id.end(), [](unsigned char ch) {
+                  return std::isxdigit(ch) != 0;
+              });
+}
 
 bool read_preference(MaaContext* context, bool requested)
 {
@@ -50,13 +59,32 @@ std::string read_account_identity(MaaContext* context)
         return {};
     }
     const std::string account_id = node->at("attach").as_object().get("account_id", std::string {});
-    const bool valid = account_id.size() == kAccountIdLength
-                       && std::all_of(account_id.begin(), account_id.end(), [](unsigned char ch) { return std::isxdigit(ch) != 0; });
-    if (!account_id.empty() && !valid) {
+    if (!account_id.empty() && !is_valid_account_id(account_id)) {
         LogWarn << "ZiplineAccount: identity has invalid format" << VAR(account_id.size());
         return {};
     }
     return account_id;
+}
+
+std::string read_account_override(MaaContext* context)
+{
+    const auto node = ReadNodeObject(context, kAccountOverrideNode, "ZiplineAccount");
+    if (!node || !node->contains("attach") || !node->at("attach").is_object()) {
+        return {};
+    }
+    const std::string account_id = node->at("attach").as_object().get("account_id", std::string {});
+    if (account_id.empty()) {
+        return {};
+    }
+    if (!is_valid_account_id(account_id)) {
+        LogWarn << "ZiplineAccount: override has invalid format" << VAR(account_id.size());
+        return {};
+    }
+    std::string normalized = account_id;
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return normalized;
 }
 
 } // namespace
@@ -68,6 +96,12 @@ bool ResolveZiplineEnabled(MaaContext* context, bool requested)
 
 std::string ReadOrCaptureZiplineAccountId(MaaContext* context)
 {
+    const std::string configured_account = read_account_override(context);
+    if (!configured_account.empty()) {
+        LogInfo << "ZiplineAccount: using the account configured for this task" << VAR(configured_account);
+        return configured_account;
+    }
+
     std::string account_id = read_account_identity(context);
     if (account_id.empty()) {
         if (MaaContextRunTask(context, kCaptureUidNode, "{}") == MaaInvalidId) {
