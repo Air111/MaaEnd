@@ -2,7 +2,7 @@
 
 完整 MapNavigator 需要 FastAPI、maafw、numpy 以及 cpp-algo/navmesh；这个页面只需要
 读 Ziplines.json / zipline_frames.json，写 ZiplineRoutes.json，所以单独起一个不碰
-agent、不连游戏的 server。浏览器打开的是空画布相对位置视图，不依赖底图。
+agent、不连游戏的 server。底图直接用仓库里已经和 base 像素对齐的 MapLocator PNG。
 """
 
 from __future__ import annotations
@@ -23,9 +23,11 @@ TOOL_DIR = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = TOOL_DIR.parents[1]
 STATIC_DIR = TOOL_DIR / "web" / "static"
 FRAMES_PATH = PROJECT_ROOT / "assets" / "data" / "MapNavigator" / "zipline_frames.json"
+MAP_IMAGE_DIR = PROJECT_ROOT / "assets" / "resource" / "image"
 
 sys.path.insert(0, str(TOOL_DIR))
 
+from model import resolve_zone_image  # noqa: E402
 from zipline_routes import (  # noqa: E402
     SavedZiplineRoute,
     build_delivery_targets,
@@ -84,13 +86,13 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _send_file(self, path: Path, missing: str) -> None:
+    def _send_file(self, path: Path, missing: str, media_type: str = "application/json; charset=utf-8") -> None:
         if not path.is_file():
             self._send_json(HTTPStatus.NOT_FOUND, {"error": missing})
             return
         body = path.read_bytes()
         self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Type", media_type)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -100,8 +102,21 @@ class Handler(SimpleHTTPRequestHandler):
         path = parsed.path
         if path == "/":
             self.send_response(HTTPStatus.FOUND)
-            self.send_header("Location", "/zipline_routes.html?blank=1")
+            self.send_header("Location", "/zipline_routes.html")
             self.end_headers()
+            return
+        if path == "/basemap-by-zone":
+            zone_id = (parse_qs(parsed.query).get("zone_id") or [""])[0]
+            target = resolve_zone_image(zone_id, MAP_IMAGE_DIR)
+            if target is None:
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": f"未找到 zone 底图: {zone_id}"})
+                return
+            root = MAP_IMAGE_DIR.resolve()
+            resolved = target.resolve()
+            if resolved != root and not resolved.is_relative_to(root):
+                self._send_json(HTTPStatus.NOT_FOUND, {"error": f"非法底图路径: {zone_id}"})
+                return
+            self._send_file(resolved, f"未找到 zone 底图: {zone_id}", "image/png")
             return
         if path == "/api/zipline-frames":
             self._send_file(FRAMES_PATH, "缺少 zipline_frames.json")
@@ -196,7 +211,7 @@ def main() -> None:
     )
 
     httpd = _bind(args.port)
-    url = f"http://127.0.0.1:{httpd.server_port}/zipline_routes.html?blank=1"
+    url = f"http://127.0.0.1:{httpd.server_port}/zipline_routes.html"
     print(f"安装目录: {install_dir}")
     print(f"记录文件: {_RECORDS_PATH}")
     print(f"路径文件: {_ROUTES_PATH}")
