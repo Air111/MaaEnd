@@ -199,9 +199,11 @@ jobs:
   build_and_install:
     needs: meta
     strategy:
+      # fork 预览专用：只构建 Windows x64 的 cpp-algo；
+      # 这份改动不要带回上游，正式 CI 仍需完整矩阵。
       matrix:
-        os: [win, macos, linux]
-        arch: [aarch64, x86_64]
+        os: [win]
+        arch: [x86_64]
       fail-fast: false
     runs-on: ${{ matrix.os == 'win' && 'windows-latest' || (matrix.os == 'macos' && 'macos-latest' || 'ubuntu-latest') }}
     env:
@@ -411,6 +413,8 @@ jobs:
           retention-days: 90
 
   package_linux_tarball:
+    # fork 预览专用：只取 Windows x64 的 cpp-algo artifact，不打包其它平台
+    if: ${{ false }}
     needs: [meta, build_and_install]
     runs-on: ubuntu-latest
     strategy:
@@ -451,6 +455,8 @@ jobs:
           path: "MaaEnd-linux-${{ matrix.arch }}.tar.gz"
 
   package_macos_dmg:
+    # fork 预览专用：只取 Windows x64 的 cpp-algo artifact，不打包其它平台
+    if: ${{ false }}
     needs: [meta, build_and_install]
     runs-on: macos-latest
     strategy:
@@ -567,6 +573,8 @@ jobs:
           path: "MaaEnd.dmg"
 
   package_win_zip:
+    # fork 预览专用：只要 cpp-algo，不需要生成完整安装包和符号包
+    if: ${{ false }}
     needs: [meta, build_and_install]
     runs-on: windows-latest
     strategy:
@@ -663,6 +671,8 @@ jobs:
 
   changelog:
     name: Generate changelog
+    # fork 预览专用：PR 上不生成 changelog；正式发布再还原
+    if: ${{ false }}
     needs: meta
     runs-on: ubuntu-latest
     outputs:
