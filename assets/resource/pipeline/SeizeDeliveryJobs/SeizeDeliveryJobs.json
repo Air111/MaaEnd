@@ -1,4 +1,20 @@
 {
+    "SeizeDeliveryJobsCaptureUid": {
+        "desc": "任务开始先补一次账号识别；已缓存时直接跳过，不重复读取",
+        "recognition": "DirectHit",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "CaptureUid",
+        "custom_action_param": {
+            "use_cache": true,
+            "stay_on_current_screen": true,
+            "allow_unknown": true
+        },
+        "post_delay": 0,
+        "next": [
+            "SeizeDeliveryJobsMain"
+        ]
+    },
     "SeizeDeliveryJobsMain": {
         "desc": "抢委托送货任务的主入口",
         "pre_delay": 0,
