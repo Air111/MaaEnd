@@ -81,10 +81,10 @@
         },
         "ZiplineImportValleyIVRegions": {
             "type": "checkbox",
-            "label": "$option.ZiplineImportValleyIVRegions.label",
+            "label": "$option.ZiplineImportRegions.label",
             "cases": [
                 {
-                    "name": "VFTheHub",
+                    "name": "TheHub",
                     "label": "$global.region.TheHub",
                     "pipeline_override": {
                         "ZiplineImportMain": {
@@ -95,7 +95,7 @@
                     }
                 },
                 {
-                    "name": "VFValleyPass",
+                    "name": "ValleyPass",
                     "label": "$global.region.ValleyPass",
                     "pipeline_override": {
                         "ZiplineImportMain": {
@@ -106,7 +106,7 @@
                     }
                 },
                 {
-                    "name": "VFAburreyQuarry",
+                    "name": "AburreyQuarry",
                     "label": "$global.region.AburreyQuarry",
                     "pipeline_override": {
                         "ZiplineImportMain": {
@@ -117,7 +117,7 @@
                     }
                 },
                 {
-                    "name": "VFOriginiumSciencePark",
+                    "name": "OriginiumSciencePark",
                     "label": "$global.region.OriginiumSciencePark",
                     "pipeline_override": {
                         "ZiplineImportMain": {
@@ -128,7 +128,7 @@
                     }
                 },
                 {
-                    "name": "VFOriginLodespring",
+                    "name": "OriginLodespring",
                     "label": "$global.region.OriginLodespring",
                     "pipeline_override": {
                         "ZiplineImportMain": {
@@ -139,7 +139,7 @@
                     }
                 },
                 {
-                    "name": "VFPowerPlateau",
+                    "name": "PowerPlateau",
                     "label": "$global.region.PowerPlateau",
                     "pipeline_override": {
                         "ZiplineImportMain": {
@@ -183,10 +183,10 @@
         },
         "ZiplineImportWulingRegions": {
             "type": "checkbox",
-            "label": "$option.ZiplineImportWulingRegions.label",
+            "label": "$option.ZiplineImportRegions.label",
             "cases": [
                 {
-                    "name": "WLJingyuValley",
+                    "name": "JingyuValley",
                     "label": "$global.region.JingyuValley",
                     "pipeline_override": {
                         "ZiplineImportMain": {
@@ -197,7 +197,7 @@
                     }
                 },
                 {
-                    "name": "WLWulingCity",
+                    "name": "WulingCity",
                     "label": "$global.region.WulingCity",
                     "pipeline_override": {
                         "ZiplineImportMain": {
@@ -208,7 +208,7 @@
                     }
                 },
                 {
-                    "name": "WLQingboStockade",
+                    "name": "QingboStockade",
                     "label": "$global.region.QingboStockade",
                     "pipeline_override": {
                         "ZiplineImportMain": {
@@ -219,7 +219,7 @@
                     }
                 },
                 {
-                    "name": "WLMarkerStone",
+                    "name": "MarkerStone",
                     "label": "$global.region.MarkerStone",
                     "pipeline_override": {
                         "ZiplineImportMain": {
@@ -230,7 +230,7 @@
                     }
                 },
                 {
-                    "name": "WLTestArea",
+                    "name": "TestArea",
                     "label": "$global.region.TestArea",
                     "pipeline_override": {
                         "ZiplineImportMain": {
@@ -241,7 +241,7 @@
                     }
                 },
                 {
-                    "name": "WLSwordVaultDale",
+                    "name": "SwordVaultDale",
                     "label": "$global.region.SwordVaultDale",
                     "pipeline_override": {
                         "ZiplineImportMain": {
@@ -252,7 +252,7 @@
                     }
                 },
                 {
-                    "name": "WLYinglungPass",
+                    "name": "YinglungPass",
                     "label": "$global.region.YinglungPass",
                     "pipeline_override": {
                         "ZiplineImportMain": {
@@ -263,7 +263,7 @@
                     }
                 },
                 {
-                    "name": "WLNorthWulingExclusionZone",
+                    "name": "NorthWulingExclusionZone",
                     "label": "$global.region.NorthWulingExclusionZone",
                     "pipeline_override": {
                         "ZiplineImportMain": {
@@ -274,7 +274,7 @@
                     }
                 },
                 {
-                    "name": "WLSnowyForest",
+                    "name": "SnowyForest",
                     "label": "$global.region.SnowyForest",
                     "pipeline_override": {
                         "ZiplineImportMain": {
@@ -285,7 +285,7 @@
                     }
                 },
                 {
-                    "name": "WLSisPainting",
+                    "name": "SisPainting",
                     "label": "$global.region.SisPainting",
                     "pipeline_override": {
                         "ZiplineImportMain": {
