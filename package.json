@@ -28,6 +28,7 @@
         "generate:SceneTeleport": "pnpm fetch:zmdmap --only teleport_anchors && node tools/pipeline-generate/SceneTeleport/sync-anchors.mjs && node tools/pipeline-generate/run-all.mjs SceneTeleport",
         "generate:AutoEssence": "pnpm fetch:zmdmap --only energy_points --only teleport_anchors && node tools/pipeline-generate/AutoEssence/sync-routes.mjs && node tools/pipeline-generate/run-all.mjs AutoEssence",
         "generate:MapOverview": "pnpm fetch:zmdmap --only region3d --only teleport_anchors && node tools/pipeline-generate/MapOverview/generate.mjs",
+        "generate:ZiplineImport": "pnpm fetch:zmdmap --only region3d --only teleport_anchors && node tools/pipeline-generate/ZiplineImport/generate.mjs",
         "generate:AutoCollect": "uv run autocollect-route generate"
     },
     "devDependencies": {
