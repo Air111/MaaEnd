@@ -59,6 +59,7 @@ jobs:
           pnpm generate:SceneTeleport
           pnpm generate:MapOverview
           pnpm generate:AutoEssence
+          pnpm generate:ZiplineImport
 
       - name: Get version info
         id: version
@@ -97,6 +98,7 @@ jobs:
             - SceneTeleport
             - MapOverview
             - AutoEssence
+            - ZiplineImport
 
             **Version Information:**
             - Version: ${{ steps.version.outputs.version }}
