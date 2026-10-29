@@ -90,6 +90,33 @@ func (r *recordFile) replaceMap(rec ziplineMapRecord) {
 	r.Maps = append(r.Maps, rec)
 }
 
+// mergeLevelMarks 只替换这张图上指定 level 的标记，其余 level 原样保留。
+// selected 为空或 marks 为空时不应调用；调用方会先跳过缺失的小区，避免把没抓到的数据误删。
+func (r *recordFile) mergeLevelMarks(accountID, mapID string, selected map[string]bool, marks []ziplineMark) {
+	rec := ziplineMapRecord{
+		AccountID: accountID,
+		MapID:     mapID,
+		FetchedAt: currentTimestampUTC(),
+		Marks:     marks,
+	}
+	for i := range r.Maps {
+		if r.Maps[i].AccountID != accountID || r.Maps[i].MapID != mapID {
+			continue
+		}
+
+		kept := make([]ziplineMark, 0, len(r.Maps[i].Marks)+len(marks))
+		for _, mark := range r.Maps[i].Marks {
+			if !selected[mark.LevelID] {
+				kept = append(kept, mark)
+			}
+		}
+		rec.Marks = append(kept, marks...)
+		r.Maps[i] = rec
+		return
+	}
+	r.Maps = append(r.Maps, rec)
+}
+
 // save 先写临时文件再原子改名，导入中途崩掉不会把已有记录截成半截（与 cpp 一致）。
 func (r *recordFile) save(path string) error {
 	dir := filepath.Dir(path)

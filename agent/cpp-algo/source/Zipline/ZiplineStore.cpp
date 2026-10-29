@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <ctime>
 #include <fstream>
+#include <iterator>
 #include <system_error>
 
 #include <meojson/json.hpp>
@@ -183,6 +184,38 @@ void ZiplineStore::replaceMap(ZiplineMapRecord record)
         return;
     }
     *it = std::move(record);
+}
+
+void ZiplineStore::mergeLevels(
+    const std::string& account_id,
+    const std::string& map_id,
+    const std::unordered_set<std::string>& levels,
+    std::vector<ZiplineMark> marks,
+    const std::string& fetched_at)
+{
+    auto it = std::find_if(maps_.begin(), maps_.end(), [&](const ZiplineMapRecord& e) {
+        return e.account_id == account_id && e.map_id == map_id;
+    });
+    if (it == maps_.end()) {
+        ZiplineMapRecord record;
+        record.account_id = account_id;
+        record.map_id = map_id;
+        record.fetched_at = fetched_at;
+        record.marks = std::move(marks);
+        maps_.push_back(std::move(record));
+        return;
+    }
+
+    std::vector<ZiplineMark> kept;
+    kept.reserve(it->marks.size() + marks.size());
+    for (const ZiplineMark& mark : it->marks) {
+        if (levels.count(mark.level_id) == 0) {
+            kept.push_back(mark);
+        }
+    }
+    kept.insert(kept.end(), std::make_move_iterator(marks.begin()), std::make_move_iterator(marks.end()));
+    it->marks = std::move(kept);
+    it->fetched_at = fetched_at;
 }
 
 std::string ZiplineStore::latestAccountId() const

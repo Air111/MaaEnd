@@ -242,6 +242,7 @@
     "ziplineimport.android_unsupported": "Android 端暫不支援匯入/更新滑索座標",
     "ziplineimport.captured_done": "UID %s：滑索匯入完成：已擷取 %d 張地圖、共 %d 處滑索架",
     "ziplineimport.login_ok": "登入成功，正在匯入/更新滑索",
+    "ziplineimport.no_area_selected": "請至少選擇一個要匯入的大地區或子地區",
     "ziplineimport.region_unsupported": "Linux 端滑索匯入暫不支援國際服（SKPORT），請把區服切回 CN 後重試",
     "ziplineimport.sign_in_hint": "請在彈出的瀏覽器視窗中，點擊地圖頁面右上角「登入」，然後登入需要匯入/更新滑索的遊戲帳號。"
 }

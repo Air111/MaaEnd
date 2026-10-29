@@ -243,6 +243,7 @@
     "ziplineimport.android_unsupported": "Zipline import is not supported on Android yet.",
     "ziplineimport.captured_done": "UID %s: Zipline import done: captured %d map(s), %d zipline rack(s)",
     "ziplineimport.login_ok": "Signed in successfully. Importing / updating ziplines…",
+    "ziplineimport.no_area_selected": "Select at least one region or subregion to import.",
     "ziplineimport.region_unsupported": "Zipline import on Linux does not support the global server (SKPORT) yet. Switch the region back to CN and try again.",
     "ziplineimport.sign_in_hint": "In the browser window that just opened, click \"Sign in\" at the top-right of the map page, then sign in with the in-game account whose ziplines you want to import or update."
 }

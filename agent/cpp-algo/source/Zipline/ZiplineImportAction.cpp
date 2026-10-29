@@ -50,6 +50,78 @@ constexpr int kIdleCloseMs = 20000;
 constexpr int kDefaultWindowWidth = 1280;
 constexpr int kDefaultWindowHeight = 720;
 
+struct AreaSelection
+{
+    bool explicit_filter = false;
+    std::unordered_set<std::string> maps;
+    std::unordered_set<std::string> levels;
+
+    static std::string MapOfLevel(const std::string& level_id)
+    {
+        const size_t pos = level_id.find("_lv");
+        return pos == std::string::npos ? std::string {} : level_id.substr(0, pos);
+    }
+
+    bool IncludesMap(const std::string& map_id) const
+    {
+        if (!explicit_filter || maps.count(map_id) != 0) {
+            return true;
+        }
+        const std::string prefix = map_id + "_";
+        return std::any_of(levels.begin(), levels.end(), [&prefix](const std::string& level) {
+            return level.rfind(prefix, 0) == 0;
+        });
+    }
+
+    bool FullyIncludesMap(const std::string& map_id) const { return !explicit_filter || maps.count(map_id) != 0; }
+
+    bool IncludesLevel(const std::string& level_id) const
+    {
+        if (!explicit_filter) {
+            return true;
+        }
+        if (level_id.empty()) {
+            return false;
+        }
+        return maps.count(MapOfLevel(level_id)) != 0 || levels.count(level_id) != 0;
+    }
+
+    std::unordered_set<std::string> LevelsForMap(const std::string& map_id) const
+    {
+        std::unordered_set<std::string> selected;
+        if (maps.count(map_id) != 0) {
+            return selected;
+        }
+        const std::string prefix = map_id + "_";
+        for (const std::string& level : levels) {
+            if (level.rfind(prefix, 0) == 0) {
+                selected.insert(level);
+            }
+        }
+        return selected;
+    }
+
+    std::vector<std::string> SelectedMaps(const std::vector<std::string>& all) const
+    {
+        if (!explicit_filter) {
+            return all;
+        }
+        std::vector<std::string> selected;
+        for (const std::string& map_id : maps) {
+            if (std::find(selected.begin(), selected.end(), map_id) == selected.end()) {
+                selected.push_back(map_id);
+            }
+        }
+        for (const std::string& level : levels) {
+            const std::string map_id = MapOfLevel(level);
+            if (!map_id.empty() && std::find(selected.begin(), selected.end(), map_id) == selected.end()) {
+                selected.push_back(map_id);
+            }
+        }
+        return selected;
+    }
+};
+
 struct ImportParam
 {
     // 由 DetectGameRegion 填入, 不接受 attach 覆盖
@@ -60,6 +132,7 @@ struct ImportParam
     int height = kDefaultWindowHeight;
     bool clear_login = false;
     std::vector<std::string> template_ids;
+    AreaSelection areas;
 };
 
 struct CapturedResponse
@@ -110,6 +183,22 @@ ImportParam LoadParam(MaaContext* context, const char* node_name)
 
     const auto& attach = obj.at("attach").as_object();
     out.clear_login = attach.get("clear_login", out.clear_login);
+    for (const auto& [key, value] : attach) {
+        if (key.rfind("include_map", 0) != 0) {
+            continue;
+        }
+        out.areas.explicit_filter = true;
+        if (!value.is_boolean() || !value.as_boolean()) {
+            continue;
+        }
+        const std::string area = key.substr(std::strlen("include_"));
+        if (area.find("_lv") != std::string::npos) {
+            out.areas.levels.insert(area);
+        }
+        else {
+            out.areas.maps.insert(area);
+        }
+    }
     return out;
 }
 
@@ -220,7 +309,10 @@ struct PersistResult
     std::string role_id; // 本次原始 roleId, 仅供提示, 不落盘
 };
 
-PersistResult PersistCaptured(const std::vector<CapturedResponse>& captured, const std::vector<std::string>& template_ids)
+PersistResult PersistCaptured(
+    const std::vector<CapturedResponse>& captured,
+    const std::vector<std::string>& template_ids,
+    const AreaSelection& areas)
 {
     PersistResult result;
     const std::filesystem::path path = ZiplineStore::DefaultPath();
@@ -272,6 +364,10 @@ PersistResult PersistCaptured(const std::vector<CapturedResponse>& captured, con
 
     size_t total = 0;
     for (auto& [map_id, marks] : by_map) {
+        if (!areas.IncludesMap(map_id)) {
+            continue;
+        }
+
         auto key = [](const ZiplineMark& m) {
             return std::tie(m.template_id, m.level_id, m.x, m.y, m.z);
         };
@@ -279,24 +375,62 @@ PersistResult PersistCaptured(const std::vector<CapturedResponse>& captured, con
         marks.erase(
             std::unique(marks.begin(), marks.end(), [&key](const ZiplineMark& a, const ZiplineMark& b) { return key(a) == key(b); }),
             marks.end());
+        if (marks.empty()) {
+            continue;
+        }
+
+        std::vector<ZiplineMark> updated;
+        if (!areas.FullyIncludesMap(map_id)) {
+            const auto levels = areas.LevelsForMap(map_id);
+            updated.reserve(marks.size());
+            for (const ZiplineMark& mark : marks) {
+                if (levels.count(mark.level_id) != 0) {
+                    updated.push_back(mark);
+                }
+            }
+            if (updated.empty()) {
+                LogWarn << "ZiplineImport: selected subregions have no marks in the captured response" << VAR(map_id);
+                continue;
+            }
+            store.mergeLevels(*account_id, map_id, levels, updated, CurrentTimestamp());
+        }
+        else {
+            updated = marks;
+            ZiplineMapRecord record;
+            record.account_id = *account_id;
+            record.map_id = map_id;
+            record.fetched_at = CurrentTimestamp();
+            record.marks = updated;
+            store.replaceMap(std::move(record));
+        }
 
         std::unordered_map<std::string, size_t> by_template;
-        for (const auto& mark : marks) {
+        for (const auto& mark : updated) {
             ++by_template[mark.template_id];
         }
         for (const auto& [template_id, count] : by_template) {
             LogInfo << "ZiplineImport: template" << VAR(map_id) << VAR(template_id) << VAR(count);
         }
 
-        LogInfo << "ZiplineImport: captured map" << VAR(map_id) << VAR(marks.size());
-        total += marks.size();
+        LogInfo << "ZiplineImport: captured map" << VAR(map_id) << VAR(updated.size());
+        total += updated.size();
+    }
 
-        ZiplineMapRecord record;
-        record.account_id = *account_id;
-        record.map_id = map_id;
-        record.fetched_at = CurrentTimestamp();
-        record.marks = std::move(marks);
-        store.replaceMap(std::move(record));
+    for (const std::string& level : areas.levels) {
+        const std::string map_id = AreaSelection::MapOfLevel(level);
+        if (map_id.empty() || areas.FullyIncludesMap(map_id)) {
+            continue;
+        }
+        bool level_captured = false;
+        const auto found = by_map.find(map_id);
+        if (found != by_map.end()) {
+            level_captured = std::any_of(found->second.begin(), found->second.end(), [&level](const ZiplineMark& mark) {
+                return mark.level_id == level;
+            });
+        }
+        if (!level_captured) {
+            LogWarn << "ZiplineImport: selected subregion was not captured" << VAR(level);
+        }
     }
 
     if (total == 0) {
@@ -521,7 +655,13 @@ MaaBool MAA_CALL ZiplineImportActionRun(
 
     ZiplineFrames frames;
     frames.load(ZiplineFrames::DefaultPath());
-    const std::vector<std::string> expected = frames.mapIds();
+    const std::vector<std::string> all_expected = frames.mapIds();
+    const std::vector<std::string> expected = param.areas.SelectedMaps(all_expected);
+    if (expected.empty()) {
+        LogError << "ZiplineImport: no map or level selected";
+        webview->Close();
+        return false;
+    }
 
     std::vector<CapturedResponse> captured;
     std::unordered_set<std::string> covered;
@@ -629,7 +769,7 @@ MaaBool MAA_CALL ZiplineImportActionRun(
         return false;
     }
 
-    const PersistResult persisted = PersistCaptured(captured, param.template_ids);
+    const PersistResult persisted = PersistCaptured(captured, param.template_ids, param.areas);
     LogInfo << "ZiplineImport: done" << VAR(captured.size()) << VAR(persisted.total);
     if (persisted.total > 0) {
         common::notice::Publish(
