@@ -1913,6 +1913,8 @@
     "option.Zipline.description": "経路探索でジップラインに寄り道するかどうか",
     "option.Zipline.label": "ジップライン",
     "option.ZiplineImportClearLogin.label": "別のアカウントをインポート",
+    "option.ZiplineImportValleyIVRegions.label": "四号谷地サブエリア（メインスイッチをオフにして選択）",
+    "option.ZiplineImportWulingRegions.label": "武陵サブエリア（メインスイッチをオフにして選択）",
     "option.ZiplineRouting.cases.Always.label": "常に有効",
     "option.ZiplineRouting.cases.Auto.label": "タスクに従う",
     "option.ZiplineRouting.cases.Never.label": "常に無効",

@@ -68,7 +68,12 @@ func (a *Action) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 		return false
 	}
 
-	expected := expectedMaps()
+	expected := p.Areas.selectedMaps(expectedMaps())
+	if len(expected) == 0 {
+		log.Error().Str("component", componentName).Msg("zipline import: no map or level selected")
+		maafocus.Print(ctx, i18n.T("ziplineimport.no_area_selected"))
+		return false
+	}
 	if !runCapture(ctx, p, profileDir, proxy, expected) {
 		return false
 	}
@@ -93,18 +98,47 @@ func (a *Action) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 	}
 
 	okMaps, totalRacks := 0, 0
+	capturedMaps := make(map[string]bool)
+	capturedLevels := make(map[string]bool)
 	// 提示里的「滑索架」数量只统计标定 types[] 认识的类型；落盘仍全量保留。
 	towers := towerTemplateIDs()
 	for mapID, marks := range byMap {
+		if !p.Areas.includesMap(mapID) {
+			continue
+		}
 		marks = dedupMarks(marks)
 		if len(marks) == 0 {
 			continue
+		}
+		capturedMaps[mapID] = true
+
+		updated := marks
+		if !p.Areas.fullyIncludesMap(mapID) {
+			levels := p.Areas.levelsForMap(mapID)
+			updated = make([]ziplineMark, 0, len(marks))
+			for _, mark := range marks {
+				if levels[mark.LevelID] {
+					updated = append(updated, mark)
+					capturedLevels[mark.LevelID] = true
+				}
+			}
+			if len(updated) == 0 {
+				log.Warn().Str("component", componentName).Str("map_id", mapID).
+					Msg("zipline import: selected subregions have no marks in the captured response")
+				continue
+			}
+			rec.mergeLevelMarks(accountID, mapID, levels, updated)
+		} else {
+			rec.replaceMap(ziplineMapRecord{AccountID: accountID, MapID: mapID, FetchedAt: currentTimestampUTC(), Marks: updated})
 		}
 
 		// 逐 templateId 报数（排序保证日志稳定），与 cpp PersistCaptured 一致：标记类型只有编号
 		// 没有名字，拿这行日志和游戏里数出来的数量对照，就能认出哪个编号是滑索、哪个是别的标记。
 		byTemplate := make(map[string]int)
-		for _, m := range marks {
+		for _, m := range updated {
+			if towers[m.TemplateID] {
+				totalRacks++
+			}
 			byTemplate[m.TemplateID]++
 		}
 		templateIDs := make([]string, 0, len(byTemplate))
@@ -118,15 +152,26 @@ func (a *Action) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 				Msg("zipline import: template marks captured")
 		}
 
-		rec.replaceMap(ziplineMapRecord{AccountID: accountID, MapID: mapID, FetchedAt: currentTimestampUTC(), Marks: marks})
 		okMaps++
-		for _, m := range marks {
-			if towers[m.TemplateID] {
-				totalRacks++
-			}
-		}
-		log.Info().Str("component", componentName).Str("map_id", mapID).Int("marks", len(marks)).
+		log.Info().Str("component", componentName).Str("map_id", mapID).Int("marks", len(updated)).
 			Msg("zipline import: map marks captured")
+	}
+
+	for mapID := range expected {
+		if !capturedMaps[mapID] {
+			log.Warn().Str("component", componentName).Str("map_id", mapID).
+				Msg("zipline import: selected map was not captured")
+		}
+	}
+	for level := range p.Areas.levels {
+		mapID := mapIDForLevel(level)
+		if mapID == "" || p.Areas.fullyIncludesMap(mapID) {
+			continue
+		}
+		if !capturedLevels[level] {
+			log.Warn().Str("component", componentName).Str("level_id", level).
+				Msg("zipline import: selected subregion was not captured")
+		}
 	}
 
 	if okMaps == 0 {

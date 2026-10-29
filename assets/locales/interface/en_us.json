@@ -1913,6 +1913,8 @@
     "option.Zipline.description": "Whether navigation may take a detour to ride a zipline",
     "option.Zipline.label": "Zipline",
     "option.ZiplineImportClearLogin.label": "Import another account",
+    "option.ZiplineImportValleyIVRegions.label": "Valley IV subregions (select after turning off the main switch)",
+    "option.ZiplineImportWulingRegions.label": "Wuling subregions (select after turning off the main switch)",
     "option.ZiplineRouting.cases.Always.label": "Always on",
     "option.ZiplineRouting.cases.Auto.label": "Follow the task",
     "option.ZiplineRouting.cases.Never.label": "Always off",

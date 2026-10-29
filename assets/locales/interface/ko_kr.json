@@ -1913,6 +1913,8 @@
     "option.Zipline.description": "경로 탐색 시 집라인을 타러 우회할지 여부",
     "option.Zipline.label": "집라인",
     "option.ZiplineImportClearLogin.label": "다른 계정 가져오기",
+    "option.ZiplineImportValleyIVRegions.label": "4번 계곡 하위 지역(메인 스위치를 끈 후 선택)",
+    "option.ZiplineImportWulingRegions.label": "우링 하위 지역(메인 스위치를 끈 후 선택)",
     "option.ZiplineRouting.cases.Always.label": "항상 사용",
     "option.ZiplineRouting.cases.Auto.label": "작업 설정 따르기",
     "option.ZiplineRouting.cases.Never.label": "항상 사용 안 함",

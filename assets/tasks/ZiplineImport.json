@@ -17,7 +17,9 @@
                 "PlayCover"
             ],
             "option": [
-                "ZiplineImportClearLogin"
+                "ZiplineImportClearLogin",
+                "ZiplineImportValleyIV",
+                "ZiplineImportWuling"
             ]
         }
     ],
@@ -46,6 +48,254 @@
                 }
             ],
             "default_case": "No"
+        },
+        "ZiplineImportValleyIV": {
+            "type": "switch",
+            "label": "$global.region.ValleyIV",
+            "cases": [
+                {
+                    "name": "Yes",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map01": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "No",
+                    "option": [
+                        "ZiplineImportValleyIVRegions"
+                    ],
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map01": false
+                            }
+                        }
+                    }
+                }
+            ],
+            "default_case": "Yes"
+        },
+        "ZiplineImportValleyIVRegions": {
+            "type": "checkbox",
+            "label": "$option.ZiplineImportValleyIVRegions.label",
+            "cases": [
+                {
+                    "name": "VFTheHub",
+                    "label": "$global.region.TheHub",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map01_lv001": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "VFValleyPass",
+                    "label": "$global.region.ValleyPass",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map01_lv002": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "VFAburreyQuarry",
+                    "label": "$global.region.AburreyQuarry",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map01_lv003": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "VFOriginiumSciencePark",
+                    "label": "$global.region.OriginiumSciencePark",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map01_lv005": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "VFOriginLodespring",
+                    "label": "$global.region.OriginLodespring",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map01_lv006": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "VFPowerPlateau",
+                    "label": "$global.region.PowerPlateau",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map01_lv007": true
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "ZiplineImportWuling": {
+            "type": "switch",
+            "label": "$global.region.Wuling",
+            "cases": [
+                {
+                    "name": "Yes",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map02": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "No",
+                    "option": [
+                        "ZiplineImportWulingRegions"
+                    ],
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map02": false
+                            }
+                        }
+                    }
+                }
+            ],
+            "default_case": "Yes"
+        },
+        "ZiplineImportWulingRegions": {
+            "type": "checkbox",
+            "label": "$option.ZiplineImportWulingRegions.label",
+            "cases": [
+                {
+                    "name": "WLJingyuValley",
+                    "label": "$global.region.JingyuValley",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map02_lv001": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "WLWulingCity",
+                    "label": "$global.region.WulingCity",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map02_lv002": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "WLQingboStockade",
+                    "label": "$global.region.QingboStockade",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map02_lv003": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "WLMarkerStone",
+                    "label": "$global.region.MarkerStone",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map02_lv004": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "WLTestArea",
+                    "label": "$global.region.TestArea",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map02_lv005": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "WLSwordVaultDale",
+                    "label": "$global.region.SwordVaultDale",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map02_lv006": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "WLYinglungPass",
+                    "label": "$global.region.YinglungPass",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map02_lv007": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "WLNorthWulingExclusionZone",
+                    "label": "$global.region.NorthWulingExclusionZone",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map02_lv008": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "WLSnowyForest",
+                    "label": "$global.region.SnowyForest",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map02_lv009": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "WLSisPainting",
+                    "label": "$global.region.SisPainting",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map02_lv010": true
+                            }
+                        }
+                    }
+                }
+            ]
         }
     }
 }

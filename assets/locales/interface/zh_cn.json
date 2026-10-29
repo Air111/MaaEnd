@@ -1913,6 +1913,8 @@
     "option.Zipline.description": "控制寻路时要不要绕去坐滑索",
     "option.Zipline.label": "滑索",
     "option.ZiplineImportClearLogin.label": "导入另一个账号",
+    "option.ZiplineImportValleyIVRegions.label": "四号谷地子地区（关闭总开关后选择）",
+    "option.ZiplineImportWulingRegions.label": "武陵子地区（关闭总开关后选择）",
     "option.ZiplineRouting.cases.Always.label": "始终启用",
     "option.ZiplineRouting.cases.Auto.label": "跟随任务",
     "option.ZiplineRouting.cases.Never.label": "始终禁用",
