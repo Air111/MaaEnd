@@ -239,6 +239,32 @@ std::optional<navmesh::WorldPoint> mount_stand_point(
     return stand;
 }
 
+// 沿来路方向贴到塔边: 角色先停在迎向来路的一侧, 不需要绕到塔背后再找交互提示
+std::optional<navmesh::WorldPoint> mount_approach_point(
+    const NaviParam& param,
+    const std::string& locator_zone,
+    const zipline::ZiplineNode& tower,
+    const navmesh::WorldPoint& approach_from)
+{
+    const navmesh::WorldPoint here = to_world(tower);
+    const double dx = approach_from.x - here.x;
+    const double dy = approach_from.y - here.y;
+    const double distance = std::hypot(dx, dy);
+    if (distance < 1e-3) {
+        return std::nullopt;
+    }
+    const navmesh::WorldPoint stand {
+        .x = here.x + dx / distance * kMountStandOffsetPx,
+        .y = here.y + dy / distance * kMountStandOffsetPx,
+    };
+    const auto snap = NavmeshSnapAt(param, locator_zone, stand, kMountStandSnapRadiusPx, tower.height);
+    if (!snap || snap->distance > kMountStandSnapTolPx || std::abs(snap->height - tower.height) > navmesh::kBaseNavFloorBand) {
+        return std::nullopt;
+    }
+    LogDebug << "ZiplineRoute: near-approach mount stand point" << VAR(tower.x) << VAR(tower.y) << VAR(stand.x) << VAR(stand.y);
+    return stand;
+}
+
 // 只取中心格, 往模型里推得越深, 被挡住那一刻离航点越远, 越容易落在预筛窗外
 std::vector<navmesh::WorldPoint> mount_spots(
     const NaviParam& param,
@@ -262,16 +288,34 @@ std::vector<navmesh::WorldPoint> mount_spots(
         }
         ranked.emplace_back((spot.x - anchor.x) * toward_x + (spot.y - anchor.y) * toward_y, spot);
     }
-    std::stable_sort(ranked.begin(), ranked.end(), [](const auto& lhs, const auto& rhs) { return lhs.first > rhs.first; });
+    // 来路一侧的中心格优先; 同侧再按离来路的距离排, 避免先绕到塔背后
+    std::stable_sort(ranked.begin(), ranked.end(), [&approach_from](const auto& lhs, const auto& rhs) {
+        if (lhs.first != rhs.first) {
+            return lhs.first < rhs.first;
+        }
+        return planar_distance(lhs.second, approach_from) < planar_distance(rhs.second, approach_from);
+    });
+
     std::vector<navmesh::WorldPoint> spots;
+    const auto add_unique = [&spots](const navmesh::WorldPoint& spot) {
+        const bool duplicate = std::any_of(spots.begin(), spots.end(), [&spot](const navmesh::WorldPoint& existing) {
+            return planar_distance(existing, spot) < 0.1;
+        });
+        if (!duplicate) {
+            spots.push_back(spot);
+        }
+    };
+    if (const std::optional<navmesh::WorldPoint> approach_spot = mount_approach_point(param, locator_zone, tower, approach_from)) {
+        add_unique(*approach_spot);
+    }
     for (const auto& entry : ranked) {
-        spots.push_back(entry.second);
+        add_unique(entry.second);
     }
     if (spots.empty()) {
         spots.push_back(anchor);
     }
     if (const std::optional<navmesh::WorldPoint> stand = mount_stand_point(param, locator_zone, tower, supplies)) {
-        spots.push_back(*stand);
+        add_unique(*stand);
     }
     LogDebug << "ZiplineRoute: stand points to try at the mount tower" << VAR(spots.size()) << VAR(anchor.x) << VAR(anchor.y) << VAR(half_x)
              << VAR(half_z);
