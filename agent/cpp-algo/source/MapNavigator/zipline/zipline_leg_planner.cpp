@@ -219,6 +219,59 @@ std::optional<navmesh::WorldPoint> mount_stand_point(
     return stand;
 }
 
+// 沿来路方向贴到塔边: 角色先停在迎向来路的一侧, 不需要绕到塔背后再找交互提示
+std::optional<navmesh::WorldPoint> mount_approach_point(
+    const NaviParam& param,
+    const std::string& locator_zone,
+    const zipline::ZiplineNode& tower,
+    const navmesh::WorldPoint& approach_from)
+{
+    const navmesh::WorldPoint here = to_world(tower);
+    const double dx = approach_from.x - here.x;
+    const double dy = approach_from.y - here.y;
+    const double distance = std::hypot(dx, dy);
+    if (distance < 1e-3) {
+        return std::nullopt;
+    }
+    const navmesh::WorldPoint stand {
+        .x = here.x + dx / distance * kMountStandOffsetPx,
+        .y = here.y + dy / distance * kMountStandOffsetPx,
+    };
+    const auto snap = NavmeshSnapAt(param, locator_zone, stand, kMountStandSnapRadiusPx, tower.height);
+    if (!snap || snap->distance > kMountStandSnapTolPx || std::abs(snap->height - tower.height) > navmesh::kBaseNavFloorBand) {
+        return std::nullopt;
+    }
+    LogDebug << "ZiplineRoute: near-approach mount stand point" << VAR(tower.x) << VAR(tower.y) << VAR(stand.x) << VAR(stand.y);
+    return stand;
+}
+
+// 塔心只有一格, 来路一侧先试, 再退到塔心与离开供电结构的站位
+std::vector<navmesh::WorldPoint> mount_spots(
+    const NaviParam& param,
+    const std::string& locator_zone,
+    const zipline::ZiplineNode& tower,
+    const navmesh::WorldPoint& approach_from,
+    const std::vector<navmesh::WorldPoint>& supplies)
+{
+    std::vector<navmesh::WorldPoint> spots;
+    const auto add_unique = [&spots](const navmesh::WorldPoint& spot) {
+        const bool duplicate = std::any_of(spots.begin(), spots.end(), [&spot](const navmesh::WorldPoint& existing) {
+            return planar_distance(existing, spot) < 0.1;
+        });
+        if (!duplicate) {
+            spots.push_back(spot);
+        }
+    };
+    if (const std::optional<navmesh::WorldPoint> approach_spot = mount_approach_point(param, locator_zone, tower, approach_from)) {
+        add_unique(*approach_spot);
+    }
+    add_unique(to_world(tower));
+    if (const std::optional<navmesh::WorldPoint> stand = mount_stand_point(param, locator_zone, tower, supplies)) {
+        add_unique(*stand);
+    }
+    LogDebug << "ZiplineRoute: stand points to try at the mount tower" << VAR(spots.size()) << VAR(tower.x) << VAR(tower.y);
+    return spots;
+}
 // BaseNavRouteResult::cost 是搜索代价, 和几何长度不能混用
 double polyline_length(const navmesh::WorldPath& path)
 {
@@ -1031,9 +1084,7 @@ std::optional<ZiplineRoute> plan_edited_path(
     route.mount_spots = mount_spots(
         in.param,
         in.request.locator_zone,
-        in.frame,
         route.towers.front(),
-        in.frames.footprint(route.towers.front().template_id),
         approach_from,
         sites.supply_points);
     // 沿用自动选择那条日志的字段名, 日志分析工具才能照常还原这次滑索方案
@@ -1174,11 +1225,14 @@ ZiplineRoute assemble_route(const PlanInputs& in, const TowerSites& sites, const
         route.diagnostics.push_back(picked.approach->diagnostic);
         route.diagnostics.push_back(picked.departure->diagnostic);
     }
-    route.mount_spots = { to_world(route.towers.front()) };
-    if (const std::optional<navmesh::WorldPoint> stand =
-            mount_stand_point(in.param, in.request.locator_zone, route.towers.front(), sites.supply_points)) {
-        route.mount_spots.push_back(*stand);
-    }
+    const navmesh::WorldPoint& approach_from =
+        route.approach.points.size() >= 2 ? route.approach.points[route.approach.points.size() - 2] : in.request.start;
+    route.mount_spots = mount_spots(
+        in.param,
+        in.request.locator_zone,
+        route.towers.front(),
+        approach_from,
+        sites.supply_points);
     // 全被排除时退回上索步行的终点, 那一点规划时已避开禁区
     std::erase_if(route.mount_spots, [&](const navmesh::WorldPoint& spot) { return inside_no_go(in.request, spot); });
     return route;
