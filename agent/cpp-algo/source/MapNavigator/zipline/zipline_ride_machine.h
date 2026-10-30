@@ -26,6 +26,8 @@ std::optional<double> ZiplineIoTurnYaw(ZiplineIo* io, double delta_deg);
 bool ZiplineIoLowerPitchTo(ZiplineIo* io, double elevation_deg);
 // 识别不到交互提示时不发按键, 返回是否识别到
 bool ZiplineIoPressMount(ZiplineIo* io);
+// 滑行中扫 E 提示; 识别到才按键, 返回是否按下
+bool ZiplineIoPressZiplineE(ZiplineIo* io);
 void ZiplineIoFireLaunch(ZiplineIo* io);
 void ZiplineIoDismount(ZiplineIo* io);
 void ZiplineIoWait(ZiplineIo* io, int32_t ms);
@@ -110,6 +112,10 @@ struct ZiplineRide
 
     YawAim aim;
     std::optional<int32_t> aim_budget_ms;
+
+    bool e_pressed = false;
+    std::optional<std::chrono::steady_clock::time_point> last_e_scan_at;
+    int32_t e_scan_timeout_ms = kZiplineEScanDefaultMs;
 
     ZiplineMountSpot exit_aim;
     int32_t exit_aim_budget_ms = 0;

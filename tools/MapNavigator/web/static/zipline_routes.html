@@ -47,8 +47,16 @@
               spellcheck="false"
               placeholder="例如 3, 7, 12" />
           </label>
-          <div class="hint">单击图上的编号按顺序追加；再点一次最后一座可撤销。输入框也接受逗号或空格分隔的编号。</div>
+          <div class="hint">
+            单击图上的编号按顺序追加；再点一次最后一座可撤销。输入框也接受逗号或空格分隔的编号。新建路径时，若上一站到当前站在其他已保存路径中连续出现，会自动复用整段并带上
+            E 标记。
+          </div>
           <div id="chips" class="chips"></div>
+          <div id="hops" class="hops"></div>
+          <div class="hint">
+            勾选标记该跳起点塔的自动终点：实际按 E 发生在上一段，例如只勾 2→3 时在 1→2 途中按 E 直连到
+            3；第一跳没有上一段，编辑器禁用，标记保留但运行时忽略。图中琥珀色为 E 直连跳，青色为普通跳。
+          </div>
           <div class="actions">
             <button id="undo" class="btn" type="button" title="移除最后一站">撤销</button>
             <button id="clear" class="btn" type="button">清空</button>

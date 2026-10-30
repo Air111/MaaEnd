@@ -46,6 +46,7 @@ BASE_ZONE_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
 _ROUTES_README = [
     "按 (account_id, zone_name, goal) 指定的手工滑索链；cpp-algo 只在该区间终点匹配时使用。",
     "goal 是 navmesh base 像素坐标；towers 是世界坐标，重新导入滑索记录后仍按世界坐标认架子。",
+    "e_hops 与 towers 逐跳对应，true 表示这一跳的起点塔设置了自动终点；实际按 E 在上一段，第一条跳没有上一段，运行时忽略。",
     "手工链里的架子未通电、已删除、某跳走不通或本轮已失败过时，运行时会退回自动查找。",
 ]
 
@@ -108,6 +109,9 @@ class SavedZiplineRoute:
     goal: tuple[float, float]
     goal_deck_y: float | None
     towers: tuple[ZiplineTowerMark, ...]
+    # 与 towers 逐跳对应; True 表示这一跳的起点塔设置了自动终点.
+    # 实际按 E 发生在进入该起点塔的上一段; 第一条跳没有上一段, 运行时忽略.
+    e_hops: tuple[bool, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -117,6 +121,7 @@ class SavedZiplineRoute:
             "goal": list(self.goal),
             "goal_deck_y": self.goal_deck_y,
             "towers": [tower.as_dict() for tower in self.towers],
+            "e_hops": list(self.e_hops),
         }
 
 
@@ -249,6 +254,11 @@ def normalize_saved_route(payload: Any) -> SavedZiplineRoute:
                 z=_number(raw.get("z"), f"第 {index + 1} 座滑索架的 z"),
             )
         )
+    raw_e_hops = payload.get("e_hops")
+    e_hops: list[bool] = []
+    if isinstance(raw_e_hops, list):
+        e_hops = [value is True for value in raw_e_hops[: len(towers) - 1]]
+    e_hops.extend([False] * (len(towers) - 1 - len(e_hops)))
     return SavedZiplineRoute(
         account_id=account_id,
         zone_name=zone_name,
@@ -256,6 +266,7 @@ def normalize_saved_route(payload: Any) -> SavedZiplineRoute:
         goal=goal,
         goal_deck_y=goal_deck_y,
         towers=tuple(towers),
+        e_hops=tuple(e_hops),
     )
 
 

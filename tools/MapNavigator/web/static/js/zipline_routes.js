@@ -11,6 +11,7 @@ import {PanGesture, canvasPoint, observeSize, wheelZoomFactor} from "./map_view.
 import {
   buildSavedRoutePayload,
   buildZoneTowers,
+  findReusableZiplineSegment,
   findSavedZiplineRoute,
   formatTowerSequence,
   parseTowerSequence,
@@ -32,6 +33,7 @@ const els = {
   routeSummary: $("route-summary"),
   sequence: $("sequence"),
   chips: $("chips"),
+  hops: $("hops"),
   chainCount: $("chain-count"),
   undo: $("undo"),
   clear: $("clear"),
@@ -62,6 +64,7 @@ const state = {
   target: null,
   towers: [],
   chain: [],
+  eHops: new Map(),
   savedRoute: null,
   dirty: false,
   hover: null,
@@ -117,6 +120,10 @@ function confirmDiscard() {
 
 function markDirty() {
   state.dirty = true;
+}
+
+function hopKey(from, to) {
+  return `${from}->${to}`;
 }
 
 // --- 启动 / 数据加载 ------------------------------------------------------------------
@@ -327,6 +334,7 @@ function loadSavedChain() {
       )
     : null;
   state.chain = [];
+  state.eHops = new Map();
   if (!state.savedRoute) return;
   const resolved = resolveSavedChain(state.towers, state.savedRoute);
   if (resolved.missing.length) {
@@ -339,6 +347,13 @@ function loadSavedChain() {
     return;
   }
   state.chain = resolved.indices;
+  const savedEHops = Array.isArray(state.savedRoute.e_hops) ? state.savedRoute.e_hops : [];
+  // 第一条跳的标记没有上一段可用，运行时忽略，但保留下来，后续在前面补站时可恢复
+  for (let position = 0; position + 1 < state.chain.length; position += 1) {
+    if (savedEHops[position] === true) {
+      state.eHops.set(hopKey(state.chain[position], state.chain[position + 1]), true);
+    }
+  }
 }
 
 // --- 地图 -----------------------------------------------------------------------------
@@ -495,12 +510,13 @@ function drawChain() {
     const to = towerByIndex(state.chain[i + 1]);
     if (!from || !to) continue;
     const valid = verdicts.get(`${from.index}->${to.index}`) !== false;
-    drawHop(from.point, to.point, i + 1, valid);
+    const direct = state.eHops.get(hopKey(from.index, to.index)) === true;
+    drawHop(from.point, to.point, i + 1, valid, direct);
   }
 }
 
-function drawHop(from, to, hopIndex, valid) {
-  const color = valid ? "#22d3ee" : "#f97316";
+function drawHop(from, to, hopIndex, valid, direct) {
+  const color = !valid ? "#f97316" : direct ? "#fbbf24" : "#22d3ee";
   const [ax, ay] = camera.worldToCanvas(from[0], from[1]);
   const [bx, by] = camera.worldToCanvas(to[0], to[1]);
   if (![ax, ay, bx, by].every(Number.isFinite)) return;
@@ -521,7 +537,7 @@ function drawHop(from, to, hopIndex, valid) {
   ctx.stroke();
   drawArrow(ax, ay, bx, by, color);
   ctx.restore();
-  drawLabel((ax + bx) / 2, (ay + by) / 2 - 12, `${hopIndex}`, color);
+  drawLabel((ax + bx) / 2, (ay + by) / 2 - 12, direct ? `${hopIndex} · E` : `${hopIndex}`, color);
 }
 
 function drawArrow(ax, ay, bx, by, color) {
@@ -631,6 +647,7 @@ function updateChainUi() {
   els.sequence.disabled = state.busy;
   els.chainCount.textContent = `${Math.max(0, state.chain.length - 1)} 跳 · ${state.chain.length} 站`;
   renderChips();
+  renderHops();
   const validation = refreshValidation();
   els.undo.disabled = !state.chain.length;
   els.clear.disabled = !state.chain.length;
@@ -670,13 +687,61 @@ function renderChips() {
     chip.textContent = `#${index}`;
     chip.addEventListener("click", () => {
       if (state.busy) return;
-      state.chain.splice(position, 1);
+      const [removed] = state.chain.splice(position, 1);
+      const previous = state.chain[position - 1];
+      const next = state.chain[position];
+      if (removed !== undefined) {
+        if (previous !== undefined) state.eHops.delete(hopKey(previous, removed));
+        if (next !== undefined) state.eHops.delete(hopKey(removed, next));
+        if (previous !== undefined && next !== undefined) state.eHops.delete(hopKey(previous, next));
+      }
       markDirty();
       updateChainUi();
       draw();
     });
     els.chips.append(chip);
   });
+}
+
+function renderHops() {
+  els.hops.replaceChildren();
+  if (state.chain.length < 2) {
+    const empty = document.createElement("div");
+    empty.className = "hop-empty";
+    empty.textContent = "至少选择两站后，可逐跳设置 E 换乘。";
+    els.hops.append(empty);
+    return;
+  }
+  for (let position = 0; position + 1 < state.chain.length; position += 1) {
+    const from = state.chain[position];
+    const to = state.chain[position + 1];
+    const key = hopKey(from, to);
+    const first = position === 0;
+    const row = document.createElement("label");
+    row.className = "hop-row";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = state.eHops.get(key) === true;
+    checkbox.disabled = state.busy || first;
+    checkbox.title = first ? "第一跳没有上一段可按 E，运行时忽略；标记会保留" : "设置起点塔的自动终点";
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) state.eHops.set(key, true);
+      else state.eHops.delete(key);
+      markDirty();
+      refreshValidation();
+      draw();
+    });
+    const label = document.createElement("span");
+    label.className = "hop-label";
+    label.textContent = `#${from} → #${to}`;
+    const note = document.createElement("span");
+    note.className = "hop-note";
+    note.textContent = first
+      ? "第一跳：没有上一段，标记保留但运行时忽略"
+      : `从 #${from} 起自动前往 #${to}；在上一段途中按 E`;
+    row.append(checkbox, label, note);
+    els.hops.append(row);
+  }
 }
 
 function refreshValidation() {
@@ -733,9 +798,41 @@ function clickTower(tower) {
   const last = state.chain[state.chain.length - 1];
   if (last === tower.index) {
     state.chain.pop();
-  } else {
-    state.chain.push(tower.index);
+    const previous = state.chain[state.chain.length - 1];
+    if (previous !== undefined) state.eHops.delete(hopKey(previous, tower.index));
+    markDirty();
+    updateChainUi();
+    draw();
+    return;
   }
+  if (last !== undefined && !state.savedRoute && state.target) {
+    const reused = findReusableZiplineSegment(
+      state.routes,
+      state.towers,
+      state.accountId,
+      state.target.zone_name,
+      last,
+      tower.index,
+      state.chain,
+    );
+    const existing = new Set(state.chain);
+    if (reused && reused.indices.slice(1).every((index) => !existing.has(index))) {
+      state.chain.push(...reused.indices.slice(1));
+      for (let position = 0; position + 1 < reused.indices.length; position += 1) {
+        const key = hopKey(reused.indices[position], reused.indices[position + 1]);
+        if (reused.eHops[position]) state.eHops.set(key, true);
+        else state.eHops.delete(key);
+      }
+      markDirty();
+      updateChainUi();
+      draw();
+      const label = reused.label ? `「${reused.label}」` : "已保存路径";
+      setStatus(`已复用${label}的 #${last} → #${tower.index} 段，共补入 ${reused.indices.length - 1} 站。`, "ok");
+      return;
+    }
+  }
+  if (last !== undefined) state.eHops.delete(hopKey(last, tower.index));
+  state.chain.push(tower.index);
   markDirty();
   updateChainUi();
   draw();
@@ -753,7 +850,10 @@ async function saveChain() {
   updateChainUi();
   setStatus("正在保存…", "info");
   try {
-    const payload = buildSavedRoutePayload(state.accountId, state.target, chainTowers);
+    const eHops = state.chain
+      .slice(0, -1)
+      .map((from, position) => state.eHops.get(hopKey(from, state.chain[position + 1])) === true);
+    const payload = buildSavedRoutePayload(state.accountId, state.target, chainTowers, eHops);
     const result = await fetchJson("/api/zipline-routes", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
@@ -926,7 +1026,10 @@ async function deleteSavedRoute(route) {
       );
       if (!current) {
         state.savedRoute = null;
-        if (!state.dirty) state.chain = [];
+        if (!state.dirty) {
+          state.chain = [];
+          state.eHops.clear();
+        }
       } else {
         state.savedRoute = current;
       }
@@ -956,7 +1059,9 @@ function bindUi() {
   });
   els.undo.addEventListener("click", () => {
     if (state.busy) return;
-    state.chain.pop();
+    const removed = state.chain.pop();
+    const previous = state.chain[state.chain.length - 1];
+    if (removed !== undefined && previous !== undefined) state.eHops.delete(hopKey(previous, removed));
     markDirty();
     updateChainUi();
     draw();
@@ -964,6 +1069,7 @@ function bindUi() {
   els.clear.addEventListener("click", () => {
     if (state.busy) return;
     state.chain = [];
+    state.eHops.clear();
     markDirty();
     updateChainUi();
     draw();

@@ -1,5 +1,6 @@
 #include "ZiplineRoutes.h"
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <iterator>
@@ -79,6 +80,20 @@ bool parse_towers(const json::object& obj, std::vector<ZiplineMark>& towers)
     return towers.size() >= 2;
 }
 
+// 旧文件没有 e_hops, 一律按不按 E 处理; 长度对不上时截断或补 false
+void parse_e_hops(const json::object& obj, size_t hop_count, std::vector<bool>& e_hops)
+{
+    e_hops.assign(hop_count, false);
+    if (!obj.contains("e_hops") || !obj.at("e_hops").is_array()) {
+        return;
+    }
+    const auto& values = obj.at("e_hops").as_array();
+    const size_t count = std::min(hop_count, values.size());
+    for (size_t i = 0; i < count; ++i) {
+        e_hops[i] = values[i].is_boolean() && values[i].as_boolean();
+    }
+}
+
 } // namespace
 
 std::filesystem::path ZiplineRoutes::DefaultPath()
@@ -137,6 +152,7 @@ bool ZiplineRoutes::load(const std::filesystem::path& path)
             ++dropped;
             continue;
         }
+        parse_e_hops(obj, route.towers.size() - 1, route.e_hops);
 
         routes_.push_back(std::move(route));
     }

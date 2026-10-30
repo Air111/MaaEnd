@@ -303,13 +303,65 @@ export function resolveSavedChain(towers, savedRoute) {
 }
 
 /**
+ * Find a contiguous sub-chain from one saved route that starts at `fromIndex`
+ * and ends at `toIndex`. The longest match wins; the returned `eHops` slice
+ * keeps the source route's auto-destination flags in the same hop order.
+ * @param {Array<Object>} routes saved routes from the API
+ * @param {Array<Object>} towers current zone towers
+ * @param {string} accountId
+ * @param {string} zoneName
+ * @param {number} fromIndex
+ * @param {number} toIndex
+ * @param {number[]} [blockedIndices] towers already in the new chain; a segment that would repeat any of them is skipped
+ * @returns {?{indices:number[], eHops:boolean[], label:string}}
+ */
+export function findReusableZiplineSegment(
+  routes,
+  towers,
+  accountId,
+  zoneName,
+  fromIndex,
+  toIndex,
+  blockedIndices = [],
+) {
+  if (!Array.isArray(routes) || !Array.isArray(towers) || fromIndex === toIndex) return null;
+  const blocked = new Set(Array.isArray(blockedIndices) ? blockedIndices : []);
+  let best = null;
+  for (const route of routes) {
+    if (!route || String(route.zone_name || "") !== String(zoneName || "")) continue;
+    const routeAccount = String(route.account_id || "");
+    if (routeAccount && routeAccount !== String(accountId || "")) continue;
+    const resolved = resolveSavedChain(towers, route);
+    if (resolved.missing.length) continue;
+    const indices = resolved.indices;
+    const flags = Array.isArray(route.e_hops) ? route.e_hops : [];
+    for (let start = 0; start < indices.length; start += 1) {
+      if (indices[start] !== fromIndex) continue;
+      for (let end = start + 1; end < indices.length; end += 1) {
+        if (indices[end] !== toIndex) continue;
+        const segment = indices.slice(start, end + 1);
+        if (new Set(segment).size !== segment.length) continue;
+        if (segment.slice(1).some((index) => blocked.has(index))) continue;
+        const eHops = Array.from({length: segment.length - 1}, (_, offset) => flags[start + offset] === true);
+        if (!best || segment.length > best.indices.length) {
+          best = {indices: segment, eHops, label: String(route.label || "")};
+        }
+      }
+    }
+  }
+  return best;
+}
+
+/**
  * Build the POST body for one chain. The tower order is the click order.
  * @param {string} accountId
  * @param {Object} target delivery target from the API
  * @param {Array<Object>} chainTowers selected tower objects in order
+ * @param {boolean[]} [eHops] per-hop E-chain flags, one per tower gap
  * @returns {Object}
  */
-export function buildSavedRoutePayload(accountId, target, chainTowers) {
+export function buildSavedRoutePayload(accountId, target, chainTowers, eHops = []) {
+  const hopCount = Math.max(0, chainTowers.length - 1);
   return {
     account_id: String(accountId || ""),
     zone_name: String(target && target.zone_name ? target.zone_name : ""),
@@ -323,6 +375,7 @@ export function buildSavedRoutePayload(accountId, target, chainTowers) {
       y: tower.world[1],
       z: tower.world[2],
     })),
+    e_hops: Array.from({length: hopCount}, (_, index) => eHops[index] === true),
   };
 }
 

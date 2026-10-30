@@ -25,6 +25,9 @@ struct ZiplineSavedRoute
     std::optional<double> goal_deck_y;
     // 按执行顺序排列, 至少两根; 只存世界坐标, 重新导入后仍能认回同一根架子
     std::vector<ZiplineMark> towers;
+    // 与 towers 逐跳对应; true 表示这一跳的起点塔设置了自动终点到下一站.
+    // 实际按 E 发生在进入这个起点塔的上一段; 第一条跳没有上一段, 运行时忽略.
+    std::vector<bool> e_hops;
 };
 
 class ZiplineRoutes
