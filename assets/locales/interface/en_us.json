@@ -2493,6 +2493,8 @@
     "task.OpenGame.focus.stuck_repair": "Attempting to recover from a stuck state",
     "task.OutpostTrading.ForceRefreshOperatorCache": "Force Refresh Operator Cache",
     "task.OutpostTrading.ForceRefreshOperatorCacheDescription": "Scans the full operator list for this run, then calculates the best operator liaison for every enabled outpost.",
+    "task.OutpostTrading.IgnoreOutpostProsperity": "Ignore Outpost Development Value",
+    "task.OutpostTrading.IgnoreOutpostProsperityDescription": "Treats every outpost as having maxed development value: selling operators are ranked only by voucher sale income. If the assigned operator provides both voucher accumulation and voucher sale, the task will not switch operators for outpost development value.",
     "task.OutpostTrading.OnlyPreferredItems": "Sell Priority Goods Only",
     "task.OutpostTrading.OnlyPreferredItemsDescription": "Sells only goods configured in the priority slots; applies only to regions with regional priority selling enabled.",
     "task.OutpostTrading.OperatorAutoSwitch": "Enable Operator Auto-Switch",

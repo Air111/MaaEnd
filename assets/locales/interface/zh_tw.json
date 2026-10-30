@@ -2493,6 +2493,8 @@
     "task.OpenGame.focus.stuck_repair": "嘗試修復卡死",
     "task.OutpostTrading.ForceRefreshOperatorCache": "強制刷新幹員快取",
     "task.OutpostTrading.ForceRefreshOperatorCacheDescription": "本次任務先完整掃描幹員列表，再為所有已啟用據點計算最佳聯絡幹員。",
+    "task.OutpostTrading.IgnoreOutpostProsperity": "忽略據點發展值",
+    "task.OutpostTrading.IgnoreOutpostProsperityDescription": "所有據點都按發展值已滿處理，販售幹員只按交易收益分檔。目前派駐幹員只要同時提供調度券累積與調度券販售，就不會再為了據點發展值而更換。",
     "task.OutpostTrading.OnlyPreferredItems": "僅販售優先貨品",
     "task.OutpostTrading.OnlyPreferredItemsDescription": "只販售優先級欄位中設定的貨品；僅對已啟用地區優先設定的地區生效。",
     "task.OutpostTrading.OperatorAutoSwitch": "啟用幹員自動切換",

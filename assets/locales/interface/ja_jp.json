@@ -2493,6 +2493,8 @@
     "task.OpenGame.focus.stuck_repair": "フリーズ修復を試行しています",
     "task.OutpostTrading.ForceRefreshOperatorCache": "オペレーターキャッシュを強制更新",
     "task.OutpostTrading.ForceRefreshOperatorCacheDescription": "今回のタスクでオペレーター一覧を最後まで確認し、有効な全拠点の最適な派遣オペレーターを計算します。",
+    "task.OutpostTrading.IgnoreOutpostProsperity": "拠点発展値を無視",
+    "task.OutpostTrading.IgnoreOutpostProsperityDescription": "すべての拠点を拠点発展値が上限に達したものとして扱い、販売オペレーターは取引収益のみで評価します。現在派遣中のオペレーターが調度券の蓄積と販売の両方を提供している場合、拠点発展値のためにオペレーターを交代しません。",
     "task.OutpostTrading.OnlyPreferredItems": "優先商品のみ販売",
     "task.OutpostTrading.OnlyPreferredItemsDescription": "優先度スロットに設定した商品のみ販売します。地域別優先販売が有効な地域にのみ適用されます。",
     "task.OutpostTrading.OperatorAutoSwitch": "オペレーター自動切り替えを有効化",

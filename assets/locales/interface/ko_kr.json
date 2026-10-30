@@ -2493,6 +2493,8 @@
     "task.OpenGame.focus.stuck_repair": "멈춤 상태 복구를 시도합니다",
     "task.OutpostTrading.ForceRefreshOperatorCache": "오퍼레이터 캐시 강제 새로고침",
     "task.OutpostTrading.ForceRefreshOperatorCacheDescription": "이번 작업에서 오퍼레이터 목록을 끝까지 확인한 뒤 활성화된 모든 거점의 최적 접선 오퍼레이터를 계산합니다.",
+    "task.OutpostTrading.IgnoreOutpostProsperity": "거점 발전치 무시",
+    "task.OutpostTrading.IgnoreOutpostProsperityDescription": "모든 거점의 발전치가 최대라고 간주하여 판매 오퍼레이터를 거래 수익만으로 평가합니다. 현재 파견된 오퍼레이터가 조정권 축적과 조정권 판매를 모두 제공하면 거점 발전치를 위해 오퍼레이터를 교체하지 않습니다.",
     "task.OutpostTrading.OnlyPreferredItems": "우선 상품만 판매",
     "task.OutpostTrading.OnlyPreferredItemsDescription": "우선순위 슬롯에 설정한 상품만 판매하며, 지역별 우선 판매가 활성화된 지역에만 적용됩니다.",
     "task.OutpostTrading.OperatorAutoSwitch": "오퍼레이터 자동 전환 활성화",

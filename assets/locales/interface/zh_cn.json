@@ -2493,6 +2493,8 @@
     "task.OpenGame.focus.stuck_repair": "尝试修复卡死",
     "task.OutpostTrading.ForceRefreshOperatorCache": "强制刷新干员缓存",
     "task.OutpostTrading.ForceRefreshOperatorCacheDescription": "本次任务先完整扫描干员列表，再为所有启用据点计算最佳联络干员。",
+    "task.OutpostTrading.IgnoreOutpostProsperity": "忽略据点发展值",
+    "task.OutpostTrading.IgnoreOutpostProsperityDescription": "所有据点都按发展值已满处理，售卖干员只按交易收益分档。当前派驻干员只要同时提供调度券积累与调度券售卖，就不会再为了据点发展值而更换。",
     "task.OutpostTrading.OnlyPreferredItems": "仅售卖优先货品",
     "task.OutpostTrading.OnlyPreferredItemsDescription": "只售卖优先级槽位中配置的货品；仅对已启用地区优先配置的地区生效。",
     "task.OutpostTrading.OperatorAutoSwitch": "启用干员自动切换",
