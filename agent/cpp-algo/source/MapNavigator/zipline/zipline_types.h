@@ -42,6 +42,12 @@ struct ZiplineHopPlan
     ZiplineNodeRef landing;
     // 同一上索架上其它索通向的架子, 挂错索时靠它们认出落在哪
     std::vector<ZiplineNodeRef> siblings;
+    // 本跳落点之后的链路塔; E 换乘可能直接落到这里, 定位与分类都要认得
+    std::vector<ZiplineNodeRef> forward_towers;
+    // 下一跳的起点塔设置了自动终点时, 这一跳按 E 成功后落到的塔; 空表示不按 E
+    std::optional<ZiplineNodeRef> e_target;
+    // E 直接落到链尾时, 下索前对准的下索段首点; 由链尾那一跳的 exit_aim 回填
+    std::optional<ZiplineMountSpot> e_exit_aim;
     // 正数往上滑, 按两端世界坐标算好
     double planned_elevation_deg = 0.0;
     // 第一个就是航点本身的落脚点, 只有链首那一跳有
@@ -148,6 +154,8 @@ struct HopCompleted
 {
     NaviPosition at;
     bool still_on_tower = false;
+    // 实际落点对应的塔; E 换乘时可能比计划落点更靠前
+    std::optional<ZiplineNodeRef> reached;
 };
 
 struct ChainAbandoned

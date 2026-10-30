@@ -168,6 +168,17 @@ class SavedRouteTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             normalize_saved_route(payload)
 
+    def test_normalizes_one_e_flag_per_hop(self) -> None:
+        payload = _saved(goal=(1.0, 2.0), tower_x=1.0).as_dict()
+        payload.pop("e_hops", None)
+        self.assertEqual(normalize_saved_route(payload).e_hops, (False,))
+
+        payload["e_hops"] = [True]
+        self.assertEqual(normalize_saved_route(payload).e_hops, (True,))
+
+        payload["e_hops"] = [True, False, True]
+        self.assertEqual(normalize_saved_route(payload).e_hops, (True,))
+
 
 def _saved(*, goal: tuple[float, float], tower_x: float) -> SavedZiplineRoute:
     return SavedZiplineRoute(

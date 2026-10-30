@@ -260,6 +260,15 @@ constexpr int32_t kZiplineRideLostFixes = 3;
 constexpr int32_t kZiplineLaunchSettleMs = 400;
 // 小地图重新出现后等这么久再采信定位
 constexpr int32_t kZiplineLandingSettleMs = 400;
+// E 提示可能只亮一小段, 滑行中按这个间隔扫; 每跳按到一次就停
+constexpr int32_t kZiplineEScanIntervalMs = 200;
+// 两段日志 8 跳实测: 发射到小地图恢复 5.70–7.92s, 按像素距离折算约 9.1–10.9 px/s.
+// 取比实测下界更保守的 8.5 px/s, 再加 2.5s 余量; 时间随本跳跨度变化, 不再用固定 15s.
+constexpr double kZiplineEScanSpeedPxPerSec = 8.5;
+constexpr int32_t kZiplineEScanMarginMs = 2500;
+constexpr int32_t kZiplineEScanMinMs = 8000;
+constexpr int32_t kZiplineEScanMaxMs = 24000;
+constexpr int32_t kZiplineEScanDefaultMs = 12000;
 constexpr double kZiplineAimToleranceDeg = 6.0;
 // 有邻架抢吸附时停点向远离它的一侧偏, 每滑错一次加一档
 constexpr double kZiplineAimBiasStepDeg = 3.0;
@@ -363,6 +372,8 @@ constexpr const char* kZiplineOnGroundEntryNode = "MapNavigatorZiplineOnGroundSt
 constexpr const char* kZiplineOnGroundNode = "MapNavigatorZiplineOnGround";
 constexpr const char* kZiplineOnTowerHintEntryNode = "MapNavigatorZiplineOnTowerHintStart";
 constexpr const char* kZiplineOnTowerHintNode = "MapNavigatorZiplineOnTowerHint";
+constexpr const char* kZiplineEStartNode = "MapNavigatorZiplineEStart";
+constexpr const char* kZiplineENode = "MapNavigatorZiplineE";
 constexpr int32_t kPromptPostSleepMs = 80;
 
 constexpr int32_t kPipelineRoiBaseWidth = 1280;

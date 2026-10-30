@@ -1033,6 +1033,8 @@ std::optional<ZiplineRoute> PlanZiplineRoute(
         for (const size_t index : chain) {
             route.towers.push_back(nodes[index]);
         }
+        route.e_hops = saved.e_hops;
+        route.e_hops.resize(route.towers.size() - 1, false);
         route.hop_alternates.resize(chain.size() - 1);
         for (size_t hop = 0; hop + 1 < chain.size(); ++hop) {
             for (size_t other = 0; other < nodes.size(); ++other) {
