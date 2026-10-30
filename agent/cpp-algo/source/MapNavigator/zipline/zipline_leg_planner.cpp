@@ -1010,7 +1010,6 @@ std::optional<ZiplineRoute> plan_edited_path(
     const ZipLinkGraph& graph,
     const zipline::ZiplineSavedRoute& saved)
 {
-    constexpr size_t kNoTower = std::numeric_limits<size_t>::max();
     const std::vector<zipline::ZiplineNode>& nodes = sites.nodes;
 
     std::vector<size_t> chain;
@@ -1091,6 +1090,8 @@ std::optional<ZiplineRoute> plan_edited_path(
     for (const size_t index : chain) {
         route.towers.push_back(nodes[index]);
     }
+    route.e_hops = saved.e_hops;
+    route.e_hops.resize(route.towers.size() - 1, false);
     route.hop_alternates.resize(chain.size() - 1);
     for (size_t hop = 0; hop + 1 < chain.size(); ++hop) {
         for (const size_t other : graph.all[chain[hop]]) {

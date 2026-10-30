@@ -240,6 +240,49 @@ select {
   line-height: var(--h-control-sm);
 }
 
+.hops {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 10px;
+}
+
+.hop-empty {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: var(--h-control-sm);
+}
+
+.hop-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.hop-row input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: var(--accent-cyan);
+  cursor: pointer;
+}
+
+.hop-row input:disabled {
+  cursor: default;
+}
+
+.hop-label {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.hop-note {
+  color: var(--text-muted);
+}
+
 .actions {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

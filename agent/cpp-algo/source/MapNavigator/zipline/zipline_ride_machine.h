@@ -18,6 +18,8 @@ public:
     virtual ZiplineObservation observe(const std::vector<ZiplineNodeRef>& hint_nodes, bool force_global_search) = 0;
     // 只在上索与下索确认期间调, 每次都要跑识别, 开销比一帧定位高
     virtual MountVerdict checkMounted() = 0;
+    // 滑行中扫 E 提示; 识别到才按键, 返回是否按下
+    virtual bool pressZiplineE() = 0;
     virtual void resetTracking() = 0;
 };
 
@@ -151,6 +153,7 @@ private:
     StageResult tickFired(const ZiplineObservation& obs, IZiplineObserver& observer, IZiplineActuator& actuator);
     StageResult tickRiding(const ZiplineObservation& obs, IZiplineObserver& observer, IZiplineActuator& actuator);
     StageResult tickLanded(const ZiplineObservation& obs, IZiplineObserver& observer, IZiplineActuator& actuator);
+    void maybePressE(IZiplineObserver& observer, Clock::time_point now);
     StageResult tickExitAiming(const ZiplineObservation& obs, IZiplineActuator& actuator);
     StageResult classify(IZiplineObserver& observer, IZiplineActuator& actuator, Clock::time_point now);
     void stampLaunch(LandingClass landing, const ZiplineNodeRef& reached);
@@ -190,6 +193,10 @@ private:
 
     std::optional<NaviPosition> last_fix_;
     LandingWatch landing_;
+
+    bool e_pressed_ = false;
+    std::optional<Clock::time_point> last_e_scan_at_;
+    int32_t e_scan_timeout_ms_ = kZiplineEScanDefaultMs;
 
     YawAimLoop aim_;
     std::optional<int32_t> aim_budget_ms_;

@@ -617,11 +617,21 @@ The file looks like this; `towers` has at least two entries in ride order. `goal
                     "y": 0.0,
                     "z": 0.0
                 }
+            ],
+            "e_hops": [
+                false
             ]
         }
     ]
 }
 ```
+
+`e_hops` has one entry per hop; `true` means the hop's start tower has an automatic destination at the next tower. The E press happens on the ride **into** that start tower: for 1-2-3, marking only 2-3 lets E during 1→2 continue directly to 3; marking 1-2 has no preceding ride, so the mark is kept but ignored at runtime. The last hop's mark is the E target of the preceding ride and should be set. The runtime scans during `Fired` / `Riding` and presses only on a hit; every stop still resolves the actual tower from `MapLocator`, and a landing further along the chain drops the hops consumed by E.
+
+> [!NOTE]
+> MapNavigator sends this E press itself. If `RealTimeTask` runs at the same time with `AutoZipline` enabled, the global task presses E whenever the prompt appears and bypasses the per-hop flags. Turn global `AutoZipline` off when using this feature.
+
+When creating a new path, if the previous and clicked towers appear consecutively in another saved path, the editor splices that whole sub-chain (including its E flags) instead of appending only the clicked tower; if an intermediate tower would repeat in the current chain, it falls back to a normal append.
 
 Manual paths only apply to intervals with a stable endpoint, such as area-to-delivery-point legs; the start still comes from the live position, so the same chain can be reused from different depots. It is not part of the authored `path`, does not change `required` boundaries, and never crosses an interval endpoint.
 
