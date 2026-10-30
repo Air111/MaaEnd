@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildSavedRoutePayload,
   buildZoneTowers,
+  findReusableZiplineSegment,
   findSavedZiplineRoute,
   formatTowerSequence,
   parseTowerSequence,
@@ -190,6 +191,52 @@ test("resolves saved world anchors back to current tower numbers", () => {
   assert.equal(resolved.missing.length, 1);
 });
 
+test("finds a reusable sub-chain and keeps its E flags", () => {
+  const towers = buildZoneTowers(
+    recordsWith(
+      [
+        [0, 0, 0],
+        [10, 5, 0],
+        [40, 0, 0],
+      ],
+      [
+        [5, 0],
+        [15, 0],
+        [45, 0],
+      ],
+    ),
+    frames,
+    "map01base",
+    "account-a",
+  );
+  const routes = [
+    {
+      account_id: "account-a",
+      zone_name: "map01base",
+      label: "园区 · 甲",
+      towers: [
+        {level_id: "map01_lv005", x: 0, y: 0, z: 0},
+        {level_id: "map01_lv005", x: 10, y: 5, z: 0},
+        {level_id: "map01_lv005", x: 40, y: 0, z: 0},
+      ],
+      e_hops: [true, false],
+    },
+  ];
+
+  const whole = findReusableZiplineSegment(routes, towers, "account-a", "map01base", 1, 3);
+  assert.deepEqual(whole.indices, [1, 2, 3]);
+  assert.deepEqual(whole.eHops, [true, false]);
+  assert.equal(whole.label, "园区 · 甲");
+
+  const tail = findReusableZiplineSegment(routes, towers, "account-a", "map01base", 2, 3);
+  assert.deepEqual(tail.indices, [2, 3]);
+  assert.deepEqual(tail.eHops, [false]);
+
+  assert.equal(findReusableZiplineSegment(routes, towers, "account-b", "map01base", 1, 3), null);
+  assert.equal(findReusableZiplineSegment(routes, towers, "account-a", "map02base", 1, 3), null);
+  assert.equal(findReusableZiplineSegment(routes, towers, "account-a", "map01base", 1, 3, [2]), null);
+});
+
 test("builds the save payload from the clicked tower order", () => {
   const towers = buildZoneTowers(
     recordsWith([
@@ -216,6 +263,7 @@ test("builds the save payload from the clicked tower order", () => {
       {level_id: "map01_lv005", template_id: "zipline", x: 10, y: 5, z: 2},
       {level_id: "map01_lv005", template_id: "zipline", x: 0, y: 0, z: 0},
     ],
+    e_hops: [false],
   });
   assert.equal(
     buildSavedRoutePayload("account-a", {label: "园区 · 甲", zone_name: "map01base", goal: [1, 2], goal_deck_y: null}, [
@@ -223,5 +271,14 @@ test("builds the save payload from the clicked tower order", () => {
       towers[1],
     ]).goal_deck_y,
     null,
+  );
+  assert.deepEqual(
+    buildSavedRoutePayload(
+      "account-a",
+      {label: "园区 · 甲", zone_name: "map01base", goal: [1, 2], goal_deck_y: 90},
+      [towers[0], towers[1]],
+      [true],
+    ).e_hops,
+    [true],
   );
 });

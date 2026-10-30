@@ -181,6 +181,7 @@ std::vector<ZiplineNodeRef> known_nodes(const ZiplineRide& ride)
     known.push_back(ride.plan.mount);
     known.push_back(ride.plan.landing);
     known.insert(known.end(), ride.plan.siblings.begin(), ride.plan.siblings.end());
+    known.insert(known.end(), ride.plan.forward_towers.begin(), ride.plan.forward_towers.end());
     known.insert(known.end(), ride.discovered_towers.begin(), ride.discovered_towers.end());
     for (const ZiplineHopRecord& record : ride.ledger) {
         known.push_back(record.plan.mount);
@@ -441,6 +442,28 @@ StageResult classify(ZiplineRide* ride, ZiplineIo* io, std::chrono::steady_clock
             << VAR_AS(last_fix_ ? last_fix_->x : 0.0, ride->last_fix ? ride->last_fix->x : 0.0)
             << VAR_AS(last_fix_ ? last_fix_->y : 0.0, ride->last_fix ? ride->last_fix->y : 0.0) << VAR(reached.x) << VAR(reached.y);
 
+    // E 换乘直接落到链路后面的塔: 仍是同一条链, 按完成记账, 由路线游标跳过中间跳
+    if (!ride->returning && (landing == LandingClass::AtOther || landing == LandingClass::AtStrayTower)) {
+        for (const ZiplineNodeRef& forward : ride->plan.forward_towers) {
+            if (!SameTower(reached, forward)) {
+                continue;
+            }
+            const bool forward_tail = SameTower(reached, ride->plan.forward_towers.back());
+            const bool aimed_exit = forward_tail && ride->plan.e_exit_aim.has_value();
+            ride->parked_on = reached;
+            LogInfo << "zipline/e/skip" << VAR(forward.x) << VAR(forward.y) << VAR(ride->plan.e_target.has_value()) << VAR(forward_tail)
+                    << VAR(ride->last_fix ? ride->last_fix->x : 0.0) << VAR(ride->last_fix ? ride->last_fix->y : 0.0);
+            commit_record(ride, HopOutcome::Completed, now);
+            const HopCompleted done { .at = *ride->last_fix, .still_on_tower = !aimed_exit, .reached = reached };
+            if (aimed_exit) {
+                // 链尾没有下一跳可借 exit_aim, 用提前回填的下索朝向先摆正再下索
+                ride->plan.exit_aim = ride->plan.e_exit_aim;
+                return start_exit_aim(ride, done, now);
+            }
+            return StageResult { .kind = StageResultKind::HopCompleted, .hop_completed = done };
+        }
+    }
+
     switch (landing) {
     case LandingClass::AtTarget:
         return on_at_target(ride, io, now);
@@ -628,12 +651,36 @@ StageResult tick_aiming(ZiplineRide* ride, ZiplineIo* io, const ZiplineObservati
 }
 
 // 滑行中小地图隐藏, 定位连断就是滑出去了; 空响时人还在上索架上, 小地图照常显示
+// 滑行中才扫; 提示命中即按一次, 成功与否都交给下一次停点的定位判定
+void maybe_press_e(ZiplineRide* ride, ZiplineIo* io, std::chrono::steady_clock::time_point now)
+{
+    if (!ride->plan.e_target || ride->e_pressed) {
+        return;
+    }
+    if (ride->record.launches.empty() || ElapsedMs(ride->record.launches.back().fired_at, now) > ride->e_scan_timeout_ms) {
+        return;
+    }
+    if (ride->last_e_scan_at && ElapsedMs(*ride->last_e_scan_at, now) < kZiplineEScanIntervalMs) {
+        return;
+    }
+    ride->last_e_scan_at = now;
+    if (!ZiplineIoPressZiplineE(io)) {
+        return;
+    }
+    ride->e_pressed = true;
+    LogInfo << "zipline/e/pressed" << VAR(ride->plan.e_target->x) << VAR(ride->plan.e_target->y)
+            << VAR_AS(StageName(ride->stage), stage_name(ride->stage));
+}
+
 StageResult tick_fired(ZiplineRide* ride, ZiplineIo* io, const ZiplineObservation& obs)
 {
     const auto now = obs.at;
     const int64_t elapsed_ms = stage_elapsed_ms(*ride, now);
     if (elapsed_ms < kZiplineLaunchSettleMs) {
         return {};
+    }
+    if (!obs.fix) {
+        maybe_press_e(ride, io, now);
     }
     if (obs.fix) {
         ride->landing.miss_streak = 0;
@@ -671,6 +718,9 @@ StageResult tick_fired(ZiplineRide* ride, ZiplineIo* io, const ZiplineObservatio
 StageResult tick_riding(ZiplineRide* ride, ZiplineIo* io, const ZiplineObservation& obs)
 {
     const auto now = obs.at;
+    if (!obs.fix && !ride->landing.minimap_back_at) {
+        maybe_press_e(ride, io, now);
+    }
     if (obs.fix && !ride->landing.minimap_back_at) {
         ride->landing.minimap_back_at = now;
         LogInfo << "zipline/riding/minimap_back" << VAR(obs.fix->x) << VAR(obs.fix->y)
@@ -950,6 +1000,9 @@ void ResetZiplineHop(ZiplineRide* ride)
     ride->last_fix.reset();
     ride->landing = {};
     ride->aim = {};
+    ride->e_pressed = false;
+    ride->last_e_scan_at.reset();
+    ride->e_scan_timeout_ms = kZiplineEScanDefaultMs;
     ride->exit_aim = {};
     ride->exit_aim_budget_ms = 0;
     ride->dismount = {};
@@ -995,6 +1048,17 @@ void BeginZiplineHop(ZiplineRide* ride, const ZiplineHopPlan& plan, std::chrono:
     ride->pitch_tier = 0;
     ride->last_fix.reset();
     ride->landing = {};
+    ride->e_pressed = false;
+    ride->last_e_scan_at.reset();
+    ride->e_scan_timeout_ms = kZiplineEScanDefaultMs;
+    if (ride->plan.e_target) {
+        const double span = std::hypot(ride->plan.mount.x - ride->plan.landing.x, ride->plan.mount.y - ride->plan.landing.y);
+        if (std::isfinite(span) && span > 0.0) {
+            const int32_t estimate = static_cast<int32_t>(std::lround(span / kZiplineEScanSpeedPxPerSec * 1000.0));
+            ride->e_scan_timeout_ms = std::clamp(estimate + kZiplineEScanMarginMs, kZiplineEScanMinMs, kZiplineEScanMaxMs);
+        }
+        LogInfo << "zipline/e/window" << VAR(span) << VAR(ride->e_scan_timeout_ms);
+    }
     ride->pending_exit = {};
     LogInfo << "zipline/begin" << VAR(resume) << VAR_AS(plan_.mount.x, ride->plan.mount.x) << VAR_AS(plan_.mount.y, ride->plan.mount.y)
             << VAR_AS(plan_.landing.x, ride->plan.landing.x) << VAR_AS(plan_.landing.y, ride->plan.landing.y)
