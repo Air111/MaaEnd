@@ -4,9 +4,11 @@ import test from "node:test";
 import {
   buildSavedRoutePayload,
   buildZoneTowers,
+  bulkEHopKeys,
   findReusableZiplineSegment,
   findSavedZiplineRoute,
   formatTowerSequence,
+  hopKeysOf,
   parseTowerSequence,
   resolveSavedChain,
   validateZiplineChain,
@@ -282,3 +284,17 @@ test("builds the save payload from the clicked tower order", () => {
     [true],
   );
 });
+
+test("lists hop keys in chain order", () => {
+  assert.deepEqual(hopKeysOf([3, 7, 12]), ["3->7", "7->12"]);
+  assert.deepEqual(hopKeysOf([3]), []);
+  assert.deepEqual(hopKeysOf(null), []);
+});
+
+test("bulk E skips the first hop and keeps the rest", () => {
+  assert.deepEqual(bulkEHopKeys([3, 7, 12]), ["7->12"]);
+  assert.deepEqual(bulkEHopKeys([3, 7]), []);
+  assert.deepEqual(bulkEHopKeys([3]), []);
+  assert.deepEqual(bulkEHopKeys(null), []);
+});
+
