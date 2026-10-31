@@ -1,10 +1,11 @@
-"""按「地区-送货点」保存的滑索链。
+"""按「地区-目标点」保存的滑索链。
 
 cpp-algo 的 ``ZiplineRoutes`` 读取同一份 ``debug/record/ZiplineRoutes.json``：
 规划区间终点与 ``goal`` 匹配、且手工链每根架子都能在当前账号的已通电记录里认回时，
 运行时直接按这条链走，不再搜索；任何一步不成立都会退回原来的自动查找。
 
-这里同时负责从 AutoDelivery 的路线节点枚举可编辑的送货点，供 MapNavigator 页面使用。
+这里同时负责枚举可编辑的目标点，供 MapNavigator 页面使用：AutoDelivery 的滑索变体路线
+既覆盖送货终点，也覆盖仓储节点（显示为「地区 · 仓储节点」）。
 """
 
 from __future__ import annotations
@@ -141,7 +142,7 @@ def build_delivery_targets(
     routes_dir: Path = AUTODELIVERY_ROUTES,
     frames_path: Path = ZIPLINE_FRAMES,
 ) -> list[DeliveryLegTarget]:
-    """列出所有带滑索变体的 AutoDelivery 送货点区间，按终点去重。"""
+    """列出所有带滑索变体的 AutoDelivery 目标点（仓储节点 + 送货终点），按终点去重。"""
     zone_names = _frame_zone_names(frames_path)
     if not zone_names:
         return []
@@ -150,14 +151,9 @@ def build_delivery_targets(
         return []
     nodes = _load_route_nodes(routes_dir)
 
-    destinations = catalog.get("destinations")
-    if not isinstance(destinations, list):
-        return []
     merged: dict[tuple[str, float, float], dict[str, Any]] = {}
-    for destination in destinations:
-        if not isinstance(destination, dict) or destination.get("walk_only") is True:
-            continue
-        node_name = str(destination.get("zip_route_node") or "")
+    for source, name_part, area in _iter_delivery_sources(catalog):
+        node_name = str(source.get("zip_route_node") or "")
         node = nodes.get(node_name)
         if node is None:
             continue
@@ -174,8 +170,6 @@ def build_delivery_targets(
         legs = _legs_of_route(path)
         if not legs:
             continue
-        area = _localized(destination.get("area"))
-        name = _localized(destination.get("name"))
         for leg_index, (goal_x, goal_y, goal_deck_y) in enumerate(legs, start=1):
             key = (zone_name, round(goal_x, GOAL_KEY_DECIMALS), round(goal_y, GOAL_KEY_DECIMALS))
             entry = merged.get(key)
@@ -193,7 +187,7 @@ def build_delivery_targets(
                 }
                 merged[key] = entry
             _append_unique(entry["areas"], area)
-            _append_unique(entry["destinations"], name)
+            _append_unique(entry["destinations"], name_part)
             entry["leg_count"] = max(int(entry["leg_count"]), len(legs))
             if goal_deck_y is not None and entry["goal_deck_y"] is None:
                 entry["goal_deck_y"] = goal_deck_y
@@ -201,7 +195,7 @@ def build_delivery_targets(
     targets: list[DeliveryLegTarget] = []
     for entry in merged.values():
         area = " / ".join(entry["areas"]) or "未分区"
-        destinations = " / ".join(entry["destinations"]) or "未命名送货点"
+        destinations = " / ".join(entry["destinations"]) or "未命名目标点"
         leg_count = int(entry["leg_count"])
         label = f"{area} · {destinations}"
         if leg_count > 1:
@@ -224,6 +218,28 @@ def build_delivery_targets(
         )
     targets.sort(key=lambda target: (target.area, target.destinations, target.leg_index, target.goal))
     return targets
+
+
+def _iter_delivery_sources(catalog: dict[str, Any]) -> list[tuple[dict[str, Any], str, str]]:
+    """把仓储节点与送货终点摊平成 (来源, 名称片段, 地区) 列表。
+
+    ``walk_only`` 的条目即使有 ``zip_route_node``，运行时分发时也只会走步行节点，
+    在这里排除，免得保存出一条永远不会被采用的滑索链。
+    """
+    sources: list[tuple[dict[str, Any], str, str]] = []
+    depots = catalog.get("depots")
+    if isinstance(depots, list):
+        for depot in depots:
+            if not isinstance(depot, dict) or depot.get("walk_only") is True:
+                continue
+            sources.append((depot, "仓储节点", _localized(depot.get("name"))))
+    destinations = catalog.get("destinations")
+    if isinstance(destinations, list):
+        for destination in destinations:
+            if not isinstance(destination, dict) or destination.get("walk_only") is True:
+                continue
+            sources.append((destination, _localized(destination.get("name")), _localized(destination.get("area"))))
+    return sources
 
 
 def normalize_saved_route(payload: Any) -> SavedZiplineRoute:
