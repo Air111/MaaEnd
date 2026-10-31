@@ -90,6 +90,7 @@ In addition to the 6 fields above, all other parameters can only be read from `c
 | `AvailableQuantityFilter` | `string` or `object` | No | ColorMatch recognition parameters used to preprocess the available-quantity OCR, overriding the `BetterSlidingAvailableQuantityFilter` node. Default: not configured. |
 | `CenterPointOffset` | `int[2]` | No | Click offset relative to the center point of the slider's recognition box `[x, y]`, negative values left/up, positive right/down. The default depends on the controller: `[-10, 0]` on desktop (Win32 / macOS / Linux) and `[-12, 0]` on mobile (ADB / CloudADB / PlayCover). |
 | `ClampTargetToSliderMax` | `bool` | No | When `true`, a target above `sliderMaxQuantity` is clamped to the maximum selectable slider quantity and execution continues. Default `false`. |
+| `QuantityTolerance` | `int` (`>= 1`) | No | Quantity tolerance. `abs(current − target) <= N` is treated as reached: no recalibration, nudge or Increase/Decrease clicks; when the miss is larger, only the excess is corrected. Unset by default, which disables the tolerance and keeps exact-target matching. |
 | `OutOfRangeOverrideEnable` | `string` | No | When the resolved target is outside the slidable range, enables the specified Pipeline node and returns success; when the field is unset (default `""`), the action fails directly. |
 | `TargetReachableOverrideEnable` | `string` | No | When the resolved target needs no clamping and falls within `[1, sliderMaxQuantity]`, enables the specified Pipeline node. Default `""`. |
 
@@ -144,6 +145,18 @@ When `TargetQuantityType` is `"Value"` (case-insensitive), `TargetQuantity` is `
 
 > [!note]
 > `Percentage` mode and `ReverseTarget: true` do not short-circuit: their effective target depends on the `availableQuantity` read at runtime, which cannot be decided before entering the flow, so they still run the full flow.
+
+### Quantity Tolerance
+
+With `QuantityTolerance` configured, the acceptance criterion changes from "equals `TargetQuantity`" to "within ±N":
+
+| Re-check result | Behavior |
+| --- | --- |
+| `abs(current − target) <= N` | Finishes immediately: no precise-click recalibration, no 1px nudge, no Increase/Decrease clicks. |
+| Miss > N | Keeps the `FineTuneQuantity` decision; this round clicks only "miss − N" times (still capped per round) and finishes as soon as a re-check enters the tolerance band. |
+
+> [!note]
+> The tolerance check takes precedence over `FineTuneQuantity` and `FineTuneFallback`: once the reading is within tolerance, neither the fine-tune nor the no-fine-tune branch runs. It only changes where the adjustment stops; it does not change the `TargetReachableOverrideEnable` / `OutOfRangeOverrideEnable` outcome.
 
 ### No-Fine-Tune Semantics
 
