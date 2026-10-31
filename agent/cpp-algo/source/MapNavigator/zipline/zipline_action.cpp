@@ -186,6 +186,20 @@ bool ZiplineIoPressZiplineE(ZiplineIo* io)
            && run_node_and_report_hit(io->nav->maa_context, kZiplineEStartNode, kZiplineENode, "{}");
 }
 
+// 按下后只认按钮消失; 识别节点改成 DoNothing, 不产生第二次点击
+bool ZiplineIoIsZiplineEPromptVisible(ZiplineIo* io)
+{
+    if (io->nav->maa_context == nullptr) {
+        return false;
+    }
+    json::object node;
+    node["action"] = "DoNothing";
+    node["next"] = json::array {};
+    json::object root;
+    root[kZiplineENode] = std::move(node);
+    return run_node_and_report_hit(io->nav->maa_context, kZiplineEStartNode, kZiplineENode, json::value(std::move(root)).dumps());
+}
+
 void ZiplineIoFireLaunch(ZiplineIo* io)
 {
     HoldPosition(io->nav->motion_controller);
