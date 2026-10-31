@@ -102,6 +102,27 @@ public:
         return hint ? MountVerdict::OnTower : MountVerdict::Unclear;
     }
 
+    // 滑行中的 E 提示只在提示本身出现时按, 按完由下一次停点的定位验证是否真的换乘
+    bool pressZiplineE() override
+    {
+        return ctx_.maa_context != nullptr
+               && run_node_and_report_hit(ctx_.maa_context, kZiplineEStartNode, kZiplineENode, "{}");
+    }
+
+    // 按下后只认按钮消失; 识别节点改成 DoNothing, 不产生第二次点击
+    bool isZiplineEPromptVisible() override
+    {
+        if (ctx_.maa_context == nullptr) {
+            return false;
+        }
+        json::object node;
+        node["action"] = "DoNothing";
+        node["next"] = json::array {};
+        json::object root;
+        root[kZiplineENode] = std::move(node);
+        return run_node_and_report_hit(ctx_.maa_context, kZiplineEStartNode, kZiplineENode, json::value(std::move(root)).dumps());
+    }
+
     void resetTracking() override { ctx_.position_provider->resetTracking(); }
 
 private:
@@ -217,14 +238,77 @@ Result drop_chain_and_recover(const Context& ctx, const char* reason, const char
     return result;
 }
 
+// E 换乘把中间几跳吃掉了, 从实际落点找链路上从这根塔出发的下一跳
+bool SkipToForwardHop(const Context& ctx, const ZiplineNodeRef& tower, const char* reason)
+{
+    const std::vector<Waypoint>& path = ctx.session->currentPath();
+    const size_t current = ctx.session->currentNodeIdx();
+    for (size_t i = current; i < path.size(); ++i) {
+        const Waypoint& waypoint = path[i];
+        if (waypoint.action == ActionType::ZIPLINE && waypoint.zipline_hop && waypoint.zipline_hop->mount.sameTower(tower)) {
+            if (i > current) {
+                ctx.session->skipPastWaypoint(i - 1, reason);
+                LogInfo << "Action: ZIPLINE E skip to the hop underfoot." << VAR(reason) << VAR(current) << VAR(i) << VAR(tower.x)
+                        << VAR(tower.y);
+            }
+            return true;
+        }
+        // 只跳过生成的连续走路点; 作者必经点、交互点不能跳
+        if (waypoint.action != ActionType::ZIPLINE && !waypoint.isContinuousRun()) {
+            return false;
+        }
+    }
+    return false;
+}
+
+// 实际落点就是链尾, 后面没有可起的下一跳, 把剩余滑索点一并跳掉走下索段
+bool SkipRemainingZiplineHops(const Context& ctx, const char* reason)
+{
+    const std::vector<Waypoint>& path = ctx.session->currentPath();
+    const size_t current = ctx.session->currentNodeIdx();
+    size_t last = current;
+    bool saw_zipline = false;
+    for (size_t i = current; i < path.size(); ++i) {
+        if (path[i].action == ActionType::ZIPLINE) {
+            last = i;
+            saw_zipline = true;
+            continue;
+        }
+        if (path[i].isContinuousRun()) {
+            continue;
+        }
+        break;
+    }
+    if (!saw_zipline) {
+        return false;
+    }
+    ctx.session->skipPastWaypoint(last, reason);
+    LogInfo << "Action: ZIPLINE E skip the remaining hops to the departure." << VAR(reason) << VAR(current) << VAR(last);
+    return true;
+}
+
 Result finish_hop(const Context& ctx, const HopCompleted& done)
 {
     Result result;
     result.consumed = true;
     result.stay_in_current_tick = true;
 
+    const Waypoint& current = ctx.session->currentWaypoint();
+    const bool forward_landing =
+        done.reached && current.zipline_hop && !done.reached->sameTower(current.zipline_hop->landing);
     ctx.session->noteCanonicalFinalGoalConsumed(ctx.session->currentAbsoluteNodeIndex(), done.at, "zipline_ride_complete");
-    ctx.session->advanceToNextWaypoint(ActionType::ZIPLINE, "zipline_ride_complete");
+    if (forward_landing) {
+        LogInfo << "Action: ZIPLINE E forward landing." << VAR(done.reached->x) << VAR(done.reached->y);
+        if (!SkipToForwardHop(ctx, *done.reached, "zipline_e_skip")) {
+            if (!SkipRemainingZiplineHops(ctx, "zipline_e_skip_tail")) {
+                LogWarn << "Action: ZIPLINE E landing has no forward hop to skip." << VAR(done.reached->x) << VAR(done.reached->y)
+                        << VAR(ctx.session->currentNodeIdx());
+            }
+        }
+    }
+    else {
+        ctx.session->advanceToNextWaypoint(ActionType::ZIPLINE, "zipline_ride_complete");
+    }
     ctx.runtime_state->onWaypointAdvance();
     LogInfo << "Action: ZIPLINE ride landed." << VAR(done.at.x) << VAR(done.at.y) << VAR(done.still_on_tower);
     if (!done.at.zone_id.empty()) {

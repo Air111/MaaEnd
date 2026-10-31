@@ -37,6 +37,7 @@ func equivalentTargetCandidatesForOwnership(
 		p.Location,
 		p.RestoreGroups,
 		p.OutpostProsperityMaxLocations,
+		p.IgnoreOutpostProsperity,
 	)
 }
 
@@ -55,6 +56,7 @@ func candidatesForCurrentSelection(p *operatorSelectionParam, owned map[string]s
 			p.Location,
 			p.RestoreGroups,
 			p.OutpostProsperityMaxLocations,
+			p.IgnoreOutpostProsperity,
 		)
 		if len(candidates) == 0 {
 			return nil
@@ -124,12 +126,13 @@ func removeOtherLockedRestoreOperators(
 }
 
 // 从候选列表中保留当前据点状态下的最高售卖档，并维持原有游戏列表顺序。
-func bestBonusTierCandidates(candidates []operatorCandidate, outpostProsperityMax bool) []operatorCandidate {
+// ignoreOutpostProsperity 为 true 时等同“发展值已满”：只按交易收益分档，不再比较发展值加成。
+func bestBonusTierCandidates(candidates []operatorCandidate, ignoreOutpostProsperity bool) []operatorCandidate {
 	if len(candidates) == 0 {
 		return nil
 	}
 	bonusTier := func(candidate operatorCandidate) int {
-		if outpostProsperityMax {
+		if ignoreOutpostProsperity {
 			return candidate.OutpostProsperityMaxBonusTier
 		}
 		return candidate.BonusTier
@@ -197,15 +200,20 @@ func restorePlanForTargetCandidate(
 // 返回当前据点可用的最高加成档候选。
 // 最高加成档指最高售卖档中同时满足该据点恢复条件的完美候选；
 // 若不存在完美候选，则回退到最高售卖档。
+// ignoreOutpostProsperity 为 true 时所有据点都按发展值已满分档，避免为了发展值切换干员。
 func preferredTargetCandidates(
 	candidates []operatorCandidate,
 	owned map[string]struct{},
 	location string,
 	restoreGroups []operatorCandidateGroup,
 	outpostProsperityMaxLocations map[string]struct{},
+	ignoreOutpostProsperity bool,
 ) []operatorCandidate {
 	_, outpostProsperityMax := outpostProsperityMaxLocations[location]
-	bestSelling := bestBonusTierCandidates(filterOwnedCandidates(candidates, owned), outpostProsperityMax)
+	bestSelling := bestBonusTierCandidates(
+		filterOwnedCandidates(candidates, owned),
+		outpostProsperityMax || ignoreOutpostProsperity,
+	)
 	if len(bestSelling) == 0 {
 		return nil
 	}
@@ -255,6 +263,7 @@ func restorePlanPreferences(
 			location,
 			p.RestoreGroups,
 			p.OutpostProsperityMaxLocations,
+			p.IgnoreOutpostProsperity,
 		)
 		if len(available) == 0 {
 			continue
@@ -442,6 +451,7 @@ type operatorSelectionParam struct {
 	LockedRestoreAssignments      map[string]operatorCandidate
 	ExcludedOperators             map[string]struct{}
 	OutpostProsperityMaxLocations map[string]struct{}
+	IgnoreOutpostProsperity       bool
 }
 
 // filterOwnedCandidates 从候选集中筛出当前账号已经拥有的干员 ID。
@@ -506,6 +516,7 @@ func resolveOperatorSelectionParam(p *operatorRecognitionParam) (*operatorSelect
 		LockedRestoreAssignments:      session.LockedRestoreAssignments,
 		ExcludedOperators:             session.ExcludedOperators,
 		OutpostProsperityMaxLocations: session.OutpostProsperityMaxLocations,
+		IgnoreOutpostProsperity:       session.IgnoreOutpostProsperity,
 	}
 	switch p.Usage {
 	case operatorUsageTarget:

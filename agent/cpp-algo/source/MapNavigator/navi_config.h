@@ -253,13 +253,30 @@ constexpr double kZiplineLandingBandWu = 6.0;
 // 落地冷启动时围绕各落点开的定位搜索窗半径, 不含模板半宽
 constexpr double kZiplineLandingHintRadiusWu = 24.0;
 constexpr int32_t kZiplineRideRetryIntervalMs = 150;
-constexpr int32_t kZiplineRideTimeoutMs = 30000;
+// 实测单跳发射→小地图恢复 5.70–7.92s；按 log 最慢 12.08m/s 算 50m 约 4.14s；
+// 一跳最大 8.0s + 50m 4.14s + 1s ≈ 13.1s，取 14s，不再用 30s
+constexpr int32_t kZiplineRideTimeoutMs = 14000;
 // 起滑后连续这么多帧定位不到算已滑出, 滑行中小地图整个隐藏
 constexpr int32_t kZiplineRideLostFixes = 3;
 // 起滑后等这么久再开始量位移
 constexpr int32_t kZiplineLaunchSettleMs = 400;
 // 小地图重新出现后等这么久再采信定位
 constexpr int32_t kZiplineLandingSettleMs = 400;
+// E 提示可能只亮一小段, 滑行中按这个间隔扫; 每段最多按一次
+constexpr int32_t kZiplineEScanIntervalMs = 200;
+// 按下后等按钮消失再算成功; 没消失就按同一次 E 重试, 两次间隔 0.5s
+constexpr int32_t kZiplineEClickVerifyMs = 500;
+// 同一个 E 最多按四次 (首发 + 三次重试)
+constexpr int32_t kZiplineEClickAttempts = 4;
+// 两个不同 E 的最小间隔: 按 log 最慢 12.08m/s 算 50m 约 4.14s, 取略大于它的 4.5s
+constexpr int32_t kZiplineEMinIntervalMs = 4500;
+// 两段日志 8 跳实测: 发射到小地图恢复 5.70–7.92s, 按像素距离折算约 9.1–10.9 px/s.
+// 取比实测下界更保守的 8.5 px/s, 再加 2.5s 余量; 时间随本跳跨度变化, 不再用固定 15s.
+constexpr double kZiplineEScanSpeedPxPerSec = 8.5;
+constexpr int32_t kZiplineEScanMarginMs = 2500;
+constexpr int32_t kZiplineEScanMinMs = 8000;
+constexpr int32_t kZiplineEScanMaxMs = 14000;
+constexpr int32_t kZiplineEScanDefaultMs = 12000;
 constexpr double kZiplineAimToleranceDeg = 6.0;
 // 有邻架抢吸附时停点向远离它的一侧偏, 每滑错一次加一档
 constexpr double kZiplineAimBiasStepDeg = 3.0;
@@ -363,6 +380,8 @@ constexpr const char* kZiplineOnGroundEntryNode = "MapNavigatorZiplineOnGroundSt
 constexpr const char* kZiplineOnGroundNode = "MapNavigatorZiplineOnGround";
 constexpr const char* kZiplineOnTowerHintEntryNode = "MapNavigatorZiplineOnTowerHintStart";
 constexpr const char* kZiplineOnTowerHintNode = "MapNavigatorZiplineOnTowerHint";
+constexpr const char* kZiplineEStartNode = "MapNavigatorZiplineEStart";
+constexpr const char* kZiplineENode = "MapNavigatorZiplineE";
 constexpr int32_t kPromptPostSleepMs = 80;
 
 constexpr int32_t kPipelineRoiBaseWidth = 1280;

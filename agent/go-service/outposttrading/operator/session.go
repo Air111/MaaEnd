@@ -27,7 +27,8 @@ const (
 // TargetAssignments 记录各据点本轮实际使用的售卖干员，供恢复规划减少无收益切换；
 // LockedRestoreAssignments 则固定成功恢复的结果，后续重新规划不能挪用这些干员；
 // ExcludedOperators 临时排除已在其他据点派驻且不应被抢占的干员；
-// OutpostProsperityMaxLocations 记录据点发展值已达上限的据点，供售卖候选忽略发展值加成。
+// OutpostProsperityMaxLocations 记录据点发展值已达上限的据点，供售卖候选忽略发展值加成；
+// IgnoreOutpostProsperity 是用户选项，开启后所有据点都按发展值已满处理售卖分档。
 type operatorSessionState struct {
 	UID                           string
 	Mode                          string
@@ -40,6 +41,7 @@ type operatorSessionState struct {
 	ExcludedOperators             map[string]struct{}
 	OutpostProsperityMaxLocations map[string]struct{}
 	RetriedSelections             map[string]struct{}
+	IgnoreOutpostProsperity       bool
 	CacheNoticePrinted            bool
 	Refreshed                     bool
 }
@@ -74,7 +76,7 @@ func (a *OperatorSessionAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) 
 
 	switch p.Operation {
 	case operatorSessionOperationReset:
-		operatorSessionReset(p.Mode)
+		operatorSessionReset(p.Mode, loadIgnoreOutpostProsperity(ctx, arg.CurrentTaskName))
 	case operatorSessionOperationRegister:
 		if !p.Active {
 			log.Debug().Str("component", operatorSessionActionName).
@@ -168,7 +170,7 @@ func parseOperatorSessionActionParam(arg *maa.CustomActionArg) (*operatorSession
 	return &p, nil
 }
 
-func operatorSessionReset(mode string) {
+func operatorSessionReset(mode string, ignoreOutpostProsperity bool) {
 	uid := currentOutpostTradingCacheUID()
 	outpostProsperityMaxLocations := cachedOutpostProsperityMaxLocations(uid)
 	operatorStateMu.Lock()
@@ -185,8 +187,42 @@ func operatorSessionReset(mode string) {
 		ExcludedOperators:             map[string]struct{}{},
 		OutpostProsperityMaxLocations: outpostProsperityMaxLocations,
 		RetriedSelections:             map[string]struct{}{},
+		IgnoreOutpostProsperity:       ignoreOutpostProsperity,
 	}
 	operatorListScanStates = map[string]operatorListScanState{}
+}
+
+// loadIgnoreOutpostProsperity 从 reset 调用节点的 attach 读取“忽略据点发展值”选项。
+// attach 在 MaaFramework 的选项覆盖中逐字段合并，不会被“强制刷新”选项的 custom_action_param 覆盖。
+func loadIgnoreOutpostProsperity(ctx *maa.Context, nodeName string) bool {
+	if ctx == nil {
+		return false
+	}
+	nodeName = strings.TrimSpace(nodeName)
+	if nodeName == "" {
+		return false
+	}
+	raw, err := ctx.GetNodeJSON(nodeName)
+	if err != nil {
+		log.Warn().Err(err).
+			Str("component", operatorSessionActionName).
+			Str("node", nodeName).
+			Msg("failed to read ignore outpost prosperity attach")
+		return false
+	}
+	var wrapper struct {
+		Attach struct {
+			IgnoreOutpostProsperity bool `json:"ignore_outpost_prosperity"`
+		} `json:"attach"`
+	}
+	if err := json.Unmarshal([]byte(raw), &wrapper); err != nil {
+		log.Warn().Err(err).
+			Str("component", operatorSessionActionName).
+			Str("node", nodeName).
+			Msg("failed to parse ignore outpost prosperity attach")
+		return false
+	}
+	return wrapper.Attach.IgnoreOutpostProsperity
 }
 
 func operatorSessionRegisterLocation(location string) {
@@ -212,6 +248,7 @@ func operatorSessionSnapshot() operatorSessionState {
 		ExcludedOperators:             cloneStringSet(operatorSession.ExcludedOperators),
 		OutpostProsperityMaxLocations: cloneStringSet(operatorSession.OutpostProsperityMaxLocations),
 		RetriedSelections:             cloneStringSet(operatorSession.RetriedSelections),
+		IgnoreOutpostProsperity:       operatorSession.IgnoreOutpostProsperity,
 		CacheNoticePrinted:            operatorSession.CacheNoticePrinted,
 		Refreshed:                     operatorSession.Refreshed,
 	}
@@ -376,6 +413,8 @@ func ensureOperatorSessionLocked() {
 		}
 		return
 	}
+	// 用户选项与账号无关；UID 在任务中途变化时也要保留本次任务的开关。
+	ignoreOutpostProsperity := operatorSession.IgnoreOutpostProsperity
 	outpostProsperityMaxLocations := cachedOutpostProsperityMaxLocations(uid)
 	operatorSession = operatorSessionState{
 		UID:                           uid,
@@ -389,6 +428,7 @@ func ensureOperatorSessionLocked() {
 		ExcludedOperators:             map[string]struct{}{},
 		OutpostProsperityMaxLocations: outpostProsperityMaxLocations,
 		RetriedSelections:             map[string]struct{}{},
+		IgnoreOutpostProsperity:       ignoreOutpostProsperity,
 	}
 }
 

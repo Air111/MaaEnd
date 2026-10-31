@@ -762,6 +762,22 @@
             }
         }
     },
+    "__ScenePrivateWorldEnterMenuMissionKey": {
+        "action": {
+            "type": "ClickKey",
+            "param": {
+                "key": 38
+            }
+        }
+    },
+    "__ScenePrivateWorldEnterMenuRegionalDevelopmentKey": {
+        "action": {
+            "type": "ClickKey",
+            "param": {
+                "key": 16
+            }
+        }
+    },
     "__ScenePrivateWorldFactoryEnterMenuBluePrint": {
         "action": {
             "type": "ClickKey",

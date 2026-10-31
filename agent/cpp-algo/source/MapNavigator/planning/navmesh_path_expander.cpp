@@ -800,6 +800,16 @@ bool try_append_zipline_leg(
                 hop_plan.siblings.push_back(ToNodeRef(other));
             }
         }
+        for (size_t forward_index = hop + 2; forward_index < route->towers.size(); ++forward_index) {
+            hop_plan.forward_towers.push_back(ToNodeRef(route->towers[forward_index]));
+        }
+        // 本跳的 E 由下一跳的标记触发: 下一跳的起点塔设置了自动终点, 这一跳途中才能按 E 直连过去
+        const size_t trigger_hop = hop + 1;
+        if (trigger_hop < route->e_hops.size() && route->e_hops[trigger_hop] && !hop_plan.forward_towers.empty()) {
+            hop_plan.e_target = hop_plan.forward_towers.front();
+            LogInfo << "zipline/e/planned" << VAR(hop) << VAR(trigger_hop) << VAR(hop_plan.mount.x) << VAR(hop_plan.mount.y)
+                    << VAR(hop_plan.e_target->x) << VAR(hop_plan.e_target->y);
+        }
         hop_plan.chain_continues = hop + 2 < route->towers.size();
         out_path.back().zipline_hop = hop_plan;
     }
@@ -815,6 +825,13 @@ bool try_append_zipline_leg(
         out_path.back().strict_arrival = true;
     }
     out_path[last_hop_index].zipline_hop->exit_aim = pick_exit_aim_point(out_path, departure_index, dismount);
+    // E 直接落到链尾时没有下一跳可借 exit_aim, 提前把链尾的下索朝向回填到每一跳
+    const std::optional<ZiplineMountSpot>& tail_exit_aim = out_path[last_hop_index].zipline_hop->exit_aim;
+    for (Waypoint& waypoint : out_path) {
+        if (waypoint.action == ActionType::ZIPLINE && waypoint.zipline_hop) {
+            waypoint.zipline_hop->e_exit_aim = tail_exit_aim;
+        }
+    }
     if (target.deck_y) {
         out_path.back().target_deck_y = target.deck_y;
     }

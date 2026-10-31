@@ -177,6 +177,22 @@ void ZiplineRideMachine::begin(const ZiplineHopPlan& plan)
     launch_fix_.reset();
     last_fix_.reset();
     riding_entered_ = false;
+    e_press_count_ = 0;
+    e_click_attempts_ = 0;
+    e_prompt_failed_ = false;
+    last_e_scan_at_.reset();
+    last_e_press_at_.reset();
+    e_click_verify_at_.reset();
+    e_scan_deadline_.reset();
+    e_scan_timeout_ms_ = kZiplineEScanDefaultMs;
+    if (plan_.e_target) {
+        const double span = std::hypot(plan_.mount.x - plan_.landing.x, plan_.mount.y - plan_.landing.y);
+        if (std::isfinite(span) && span > 0.0) {
+            const int32_t estimate = static_cast<int32_t>(std::lround(span / kZiplineEScanSpeedPxPerSec * 1000.0));
+            e_scan_timeout_ms_ = std::clamp(estimate + kZiplineEScanMarginMs, kZiplineEScanMinMs, kZiplineEScanMaxMs);
+        }
+        LogInfo << "zipline/e/window" << VAR(span) << VAR(e_scan_timeout_ms_);
+    }
     unknown_deadline_.reset();
     pending_exit_ = {};
     LogInfo << "zipline/begin" << VAR(resume) << VAR(plan_.mount.x) << VAR(plan_.mount.y) << VAR(plan_.landing.x) << VAR(plan_.landing.y)
@@ -278,6 +294,14 @@ void ZiplineRideMachine::reset()
     miss_streak_ = 0;
     settle_hits_ = 0;
     riding_entered_ = false;
+    e_press_count_ = 0;
+    e_click_attempts_ = 0;
+    e_prompt_failed_ = false;
+    last_e_scan_at_.reset();
+    last_e_press_at_.reset();
+    e_click_verify_at_.reset();
+    e_scan_deadline_.reset();
+    e_scan_timeout_ms_ = kZiplineEScanDefaultMs;
     minimap_back_at_.reset();
     unknown_deadline_.reset();
     resetStableHeading();
@@ -346,6 +370,7 @@ std::vector<ZiplineNodeRef> ZiplineRideMachine::knownNodes() const
     known.push_back(plan_.mount);
     known.push_back(plan_.landing);
     known.insert(known.end(), plan_.siblings.begin(), plan_.siblings.end());
+    known.insert(known.end(), plan_.forward_towers.begin(), plan_.forward_towers.end());
     known.insert(known.end(), discovered_towers_.begin(), discovered_towers_.end());
     for (const ZiplineHopRecord& record : ledger_) {
         known.push_back(record.plan.mount);
@@ -607,6 +632,7 @@ StageResult ZiplineRideMachine::tickAiming(const ZiplineObservation& obs, IZipli
     }
     actuator.fireLaunch();
     const auto fired_at = Clock::now();
+    e_scan_deadline_ = fired_at + std::chrono::milliseconds(e_scan_timeout_ms_);
     record_.launches.push_back(ZiplineLaunch {
         .fired_at = fired_at,
         .heading_deg = heading,
@@ -626,6 +652,95 @@ StageResult ZiplineRideMachine::tickAiming(const ZiplineObservation& obs, IZipli
     return {};
 }
 
+// E 按下后按钮消失才算成功; 没消失就对同一个 E 重试, 两次点击间隔 0.5s.
+// 不同 E 之间还有最小间隔, 避免把同一提示的残留当成下一段.
+void ZiplineRideMachine::maybePressE(IZiplineObserver& observer, Clock::time_point now)
+{
+    if (!plan_.e_target || plan_.forward_towers.empty()) {
+        return;
+    }
+    if (e_press_count_ >= static_cast<int>(plan_.forward_towers.size())) {
+        return;
+    }
+
+    // 已发过一次点击, 等 0.5s 看按钮是否消失
+    if (e_click_verify_at_) {
+        if (now < *e_click_verify_at_) {
+            return;
+        }
+        if (!observer.isZiplineEPromptVisible()) {
+            ++e_press_count_;
+            // 下限按实际点击时刻算, 不从 0.5s 后的确认时刻再顺延
+            last_e_press_at_ = *e_click_verify_at_ - std::chrono::milliseconds(kZiplineEClickVerifyMs);
+            e_click_verify_at_.reset();
+            e_click_attempts_ = 0;
+            e_prompt_failed_ = false;
+            e_scan_deadline_ = now + std::chrono::milliseconds(kZiplineEScanMaxMs);
+            // 一段连续 E 链可能比单跳久, 每次成功接续后给本段重新计时
+            if (stage_ == ZiplineStage::Riding) {
+                stage_entered_at_ = now;
+            }
+            LogInfo << "zipline/e/pressed" << VAR(plan_.e_target->x) << VAR(plan_.e_target->y) << VAR(e_press_count_)
+                    << VAR(plan_.forward_towers.size()) << VAR_AS(StageName(stage_), stage_name(stage_));
+            return;
+        }
+        if (e_click_attempts_ < kZiplineEClickAttempts) {
+            if (last_e_scan_at_ && ElapsedMs(*last_e_scan_at_, now) < kZiplineEScanIntervalMs) {
+                return;
+            }
+            last_e_scan_at_ = now;
+            if (observer.pressZiplineE()) {
+                ++e_click_attempts_;
+                e_click_verify_at_ = now + std::chrono::milliseconds(kZiplineEClickVerifyMs);
+                e_scan_deadline_ = now + std::chrono::milliseconds(kZiplineEScanMaxMs);
+                LogInfo << "zipline/e/retry" << VAR(plan_.e_target->x) << VAR(plan_.e_target->y) << VAR(e_click_attempts_);
+            }
+            return;
+        }
+        // 四次都没消失: 不再连按同一个提示, 等它自己消失; 若实际没成功,
+        // 角色会停在当前滑的终点塔, 交给停点定位处理.
+        LogWarn << "zipline/e/verify/still_visible" << VAR(plan_.e_target->x) << VAR(plan_.e_target->y) << VAR(e_click_attempts_);
+        e_click_verify_at_.reset();
+        e_click_attempts_ = 0;
+        e_prompt_failed_ = true;
+        last_e_press_at_ = now;
+        e_scan_deadline_ = now + std::chrono::milliseconds(kZiplineEScanMaxMs);
+        return;
+    }
+
+    // 上一次重试失败的提示还没消失时, 不把它当成新的 E
+    if (e_prompt_failed_) {
+        if (last_e_scan_at_ && ElapsedMs(*last_e_scan_at_, now) < kZiplineEClickVerifyMs) {
+            return;
+        }
+        last_e_scan_at_ = now;
+        if (observer.isZiplineEPromptVisible()) {
+            return;
+        }
+        e_prompt_failed_ = false;
+        return;
+    }
+
+    if (!e_scan_deadline_ || now > *e_scan_deadline_) {
+        return;
+    }
+    // 两个不同 E 至少隔半程最大索距对应的时间
+    if (last_e_press_at_ && ElapsedMs(*last_e_press_at_, now) < kZiplineEMinIntervalMs) {
+        return;
+    }
+    if (last_e_scan_at_ && ElapsedMs(*last_e_scan_at_, now) < kZiplineEScanIntervalMs) {
+        return;
+    }
+    last_e_scan_at_ = now;
+    if (!observer.pressZiplineE()) {
+        return;
+    }
+    e_click_attempts_ = 1;
+    e_click_verify_at_ = now + std::chrono::milliseconds(kZiplineEClickVerifyMs);
+    e_scan_deadline_ = now + std::chrono::milliseconds(kZiplineEScanMaxMs);
+    LogInfo << "zipline/e/click" << VAR(plan_.e_target->x) << VAR(plan_.e_target->y) << VAR(e_click_attempts_);
+}
+
 // 滑行中小地图隐藏, 定位连断就是滑出去了; 空响时人还在上索架上, 小地图照常显示
 StageResult ZiplineRideMachine::tickFired(const ZiplineObservation& obs, IZiplineObserver& observer, IZiplineActuator& actuator)
 {
@@ -633,6 +748,9 @@ StageResult ZiplineRideMachine::tickFired(const ZiplineObservation& obs, IZiplin
     const int64_t elapsed_ms = stageElapsedMs(now);
     if (elapsed_ms < kZiplineLaunchSettleMs) {
         return {};
+    }
+    if (!obs.fix) {
+        maybePressE(observer, now);
     }
     if (obs.fix) {
         miss_streak_ = 0;
@@ -670,6 +788,9 @@ StageResult ZiplineRideMachine::tickFired(const ZiplineObservation& obs, IZiplin
 StageResult ZiplineRideMachine::tickRiding(const ZiplineObservation& obs, IZiplineObserver& observer, IZiplineActuator& actuator)
 {
     const auto now = obs.at;
+    if (!obs.fix && !minimap_back_at_) {
+        maybePressE(observer, now);
+    }
     if (obs.fix && !minimap_back_at_) {
         minimap_back_at_ = now;
         LogInfo << "zipline/riding/minimap_back" << VAR(obs.fix->x) << VAR(obs.fix->y) << VAR_AS(StageElapsedMs(now), stageElapsedMs(now));
@@ -802,11 +923,33 @@ StageResult ZiplineRideMachine::classify(IZiplineObserver& observer, IZiplineAct
             << VAR(hop_retry_count_) << VAR(last_fix_ ? last_fix_->x : 0.0) << VAR(last_fix_ ? last_fix_->y : 0.0) << VAR(reached.x)
             << VAR(reached.y);
 
+    // E 换乘直接落到链路后面的塔: 仍是同一条链, 按完成记账, 由路线游标跳过中间跳
+    if (!returning_ && (landing == LandingClass::AtOther || landing == LandingClass::AtStrayTower)) {
+        for (const ZiplineNodeRef& forward : plan_.forward_towers) {
+            if (!reached.sameTower(forward)) {
+                continue;
+            }
+            const bool forward_tail = reached.sameTower(plan_.forward_towers.back());
+            const bool aimed_exit = forward_tail && plan_.e_exit_aim.has_value();
+            parked_on_ = reached;
+            LogInfo << "zipline/e/skip" << VAR(forward.x) << VAR(forward.y) << VAR(plan_.e_target.has_value()) << VAR(forward_tail)
+                    << VAR(last_fix_ ? last_fix_->x : 0.0) << VAR(last_fix_ ? last_fix_->y : 0.0);
+            commitRecord(HopOutcome::Completed, now);
+            const HopCompleted done { .at = *last_fix_, .still_on_tower = !aimed_exit, .reached = reached };
+            if (aimed_exit) {
+                // 链尾没有下一跳可借 exit_aim, 用提前回填的下索朝向先摆正再下索
+                plan_.exit_aim = plan_.e_exit_aim;
+                return startExitAim(done, now);
+            }
+            return done;
+        }
+    }
+
     switch (landing) {
     case LandingClass::AtTarget: {
         if (!returning_) {
             commitRecord(HopOutcome::Completed, now);
-            const HopCompleted done { .at = *last_fix_, .still_on_tower = plan_.chain_continues };
+            const HopCompleted done { .at = *last_fix_, .still_on_tower = plan_.chain_continues, .reached = plan_.landing };
             if (plan_.chain_continues) {
                 parked_on_ = plan_.landing;
                 pending_exit_ = done;
