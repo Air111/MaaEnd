@@ -33,6 +33,7 @@ type betterSlidingParam struct {
 	ClampTargetToSliderMax        bool                       `json:"ClampTargetToSliderMax"`
 	FineTuneQuantity              any                        `json:"FineTuneQuantity"`
 	FineTuneFallback              string                     `json:"FineTuneFallback"`
+	QuantityTolerance             int                        `json:"QuantityTolerance"`
 	ResetBeforeFindStart          bool                       `json:"ResetBeforeFindStart"`
 	presence                      betterSlidingParamPresence `json:"-"`
 }
@@ -55,6 +56,7 @@ type betterSlidingParamPresence struct {
 	ClampTargetToSliderMax        bool
 	FineTuneQuantity              bool
 	FineTuneFallback              bool
+	QuantityTolerance             bool
 	ResetBeforeFindStart          bool
 }
 
@@ -86,6 +88,9 @@ type betterSlidingParamPresence struct {
 //     Integers above maxFineTuneThreshold saturate to "always fine-tune".
 //   - FineTuneFallback: none (default) / more / less; only used when this run decides
 //     not to fine-tune, more/less nudges the precise click by 1px steps on one axis.
+//   - QuantityTolerance: accept the current quantity when |current - target| <= N:
+//     no recalibration, nudge or Increase/Decrease clicks. When the miss is larger,
+//     only the excess beyond N is corrected. 0 (default) disables the tolerance.
 //   - ResetBeforeFindStart: swipe toward the minimum before matching the slider start position,
 //     so the recorded start position is the minimum value (default false)
 //   - SwipeButton: slider template recognition param patch overriding BetterSlidingSwipeButton
@@ -104,6 +109,7 @@ type BetterSlidingAction struct {
 	ClampTargetToSliderMax        bool
 	FineTuneQuantity              fineTuneQuantity
 	FineTuneFallback              string
+	QuantityTolerance             int
 	ResetBeforeFindStart          bool
 	OutOfRangeOverrideEnable      string
 	TargetReachableOverrideEnable string
