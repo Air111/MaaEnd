@@ -11,9 +11,11 @@ import {PanGesture, canvasPoint, observeSize, wheelZoomFactor} from "./map_view.
 import {
   buildSavedRoutePayload,
   buildZoneTowers,
+  bulkEHopKeys,
   findReusableZiplineSegment,
   findSavedZiplineRoute,
   formatTowerSequence,
+  hopKeysOf,
   parseTowerSequence,
   resolveSavedChain,
   towerTypeName,
@@ -35,7 +37,7 @@ const els = {
   chips: $("chips"),
   hops: $("hops"),
   chainCount: $("chain-count"),
-  undo: $("undo"),
+  allE: $("all-e"),
   clear: $("clear"),
   save: $("save"),
   delete: $("delete"),
@@ -195,7 +197,7 @@ function disableEditing() {
   els.account.disabled = true;
   els.target.disabled = true;
   els.sequence.disabled = true;
-  els.undo.disabled = true;
+  els.allE.disabled = true;
   els.clear.disabled = true;
   els.save.disabled = true;
   els.delete.disabled = true;
@@ -649,11 +651,17 @@ function updateChainUi() {
   renderChips();
   renderHops();
   const validation = refreshValidation();
-  els.undo.disabled = !state.chain.length;
+  els.allE.disabled = bulkEHopKeys(state.chain).length === 0 || state.busy || allHopsMarked();
   els.clear.disabled = !state.chain.length;
   els.save.disabled = !state.target || !state.accountId || !validation.ok || state.busy;
   els.delete.disabled = !state.savedRoute || state.busy;
   updateRouteSummary();
+}
+
+function allHopsMarked() {
+  // 第一跳不参与批量勾选；只有它可勾时视为「已经全勾」，按钮保持禁用。
+  const keys = bulkEHopKeys(state.chain);
+  return keys.length > 0 && keys.every((key) => state.eHops.get(key) === true);
 }
 
 function updateRouteSummary() {
@@ -1057,11 +1065,13 @@ function bindUi() {
     applySequenceText();
     els.sequence.blur();
   });
-  els.undo.addEventListener("click", () => {
+  // 全设E 只改勾选状态，不落盘；保存仍要按「保存」。
+  // 第一跳没有上一段可按 E，运行时也不用它，所以批量勾选跳过它。
+  els.allE.addEventListener("click", () => {
     if (state.busy) return;
-    const removed = state.chain.pop();
-    const previous = state.chain[state.chain.length - 1];
-    if (removed !== undefined && previous !== undefined) state.eHops.delete(hopKey(previous, removed));
+    const keys = bulkEHopKeys(state.chain);
+    if (!keys.length) return;
+    for (const key of keys) state.eHops.set(key, true);
     markDirty();
     updateChainUi();
     draw();
