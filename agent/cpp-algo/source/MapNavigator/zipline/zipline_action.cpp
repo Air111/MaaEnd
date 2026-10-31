@@ -109,6 +109,20 @@ public:
                && run_node_and_report_hit(ctx_.maa_context, kZiplineEStartNode, kZiplineENode, "{}");
     }
 
+    // 按下后只认按钮消失; 识别节点改成 DoNothing, 不产生第二次点击
+    bool isZiplineEPromptVisible() override
+    {
+        if (ctx_.maa_context == nullptr) {
+            return false;
+        }
+        json::object node;
+        node["action"] = "DoNothing";
+        node["next"] = json::array {};
+        json::object root;
+        root[kZiplineENode] = std::move(node);
+        return run_node_and_report_hit(ctx_.maa_context, kZiplineEStartNode, kZiplineENode, json::value(std::move(root)).dumps());
+    }
+
     void resetTracking() override { ctx_.position_provider->resetTracking(); }
 
 private:
