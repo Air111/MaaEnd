@@ -635,6 +635,7 @@ StageResult tick_aiming(ZiplineRide* ride, ZiplineIo* io, const ZiplineObservati
     }
     ZiplineIoFireLaunch(io);
     const auto fired_at = std::chrono::steady_clock::now();
+    ride->e_scan_deadline = fired_at + std::chrono::milliseconds(ride->e_scan_timeout_ms);
     ride->record.launches.push_back(
         ZiplineLaunch {
             .fired_at = fired_at,
@@ -651,13 +652,80 @@ StageResult tick_aiming(ZiplineRide* ride, ZiplineIo* io, const ZiplineObservati
 }
 
 // 滑行中小地图隐藏, 定位连断就是滑出去了; 空响时人还在上索架上, 小地图照常显示
-// 滑行中才扫; 提示命中即按一次, 成功与否都交给下一次停点的定位判定
+// E 按下后按钮消失才算成功; 没消失就对同一个 E 重试, 两次点击间隔 0.5s.
+// 不同 E 之间还有最小间隔, 避免把同一提示的残留当成下一段.
 void maybe_press_e(ZiplineRide* ride, ZiplineIo* io, std::chrono::steady_clock::time_point now)
 {
-    if (!ride->plan.e_target || ride->e_pressed) {
+    if (!ride->plan.e_target || ride->plan.forward_towers.empty()) {
         return;
     }
-    if (ride->record.launches.empty() || ElapsedMs(ride->record.launches.back().fired_at, now) > ride->e_scan_timeout_ms) {
+    if (ride->e_press_count >= static_cast<int>(ride->plan.forward_towers.size())) {
+        return;
+    }
+
+    // 已发过一次点击, 等 0.5s 看按钮是否消失
+    if (ride->e_click_verify_at) {
+        if (now < *ride->e_click_verify_at) {
+            return;
+        }
+        if (!ZiplineIoIsZiplineEPromptVisible(io)) {
+            ++ride->e_press_count;
+            // 下限按实际点击时刻算, 不从 0.5s 后的确认时刻再顺延
+            ride->last_e_press_at = *ride->e_click_verify_at - std::chrono::milliseconds(kZiplineEClickVerifyMs);
+            ride->e_click_verify_at.reset();
+            ride->e_click_attempts = 0;
+            ride->e_prompt_failed = false;
+            ride->e_scan_deadline = now + std::chrono::milliseconds(kZiplineEScanMaxMs);
+            // 一段连续 E 链可能比单跳久, 每次成功接续后给本段重新计时
+            if (ride->stage == ZiplineStage::Riding) {
+                ride->stage_entered_at = now;
+            }
+            LogInfo << "zipline/e/pressed" << VAR(ride->plan.e_target->x) << VAR(ride->plan.e_target->y) << VAR(ride->e_press_count)
+                    << VAR(ride->plan.forward_towers.size()) << VAR_AS(StageName(ride->stage), stage_name(ride->stage));
+            return;
+        }
+        if (ride->e_click_attempts < kZiplineEClickAttempts) {
+            if (ride->last_e_scan_at && ElapsedMs(*ride->last_e_scan_at, now) < kZiplineEScanIntervalMs) {
+                return;
+            }
+            ride->last_e_scan_at = now;
+            if (ZiplineIoPressZiplineE(io)) {
+                ++ride->e_click_attempts;
+                ride->e_click_verify_at = now + std::chrono::milliseconds(kZiplineEClickVerifyMs);
+                ride->e_scan_deadline = now + std::chrono::milliseconds(kZiplineEScanMaxMs);
+                LogInfo << "zipline/e/retry" << VAR(ride->plan.e_target->x) << VAR(ride->plan.e_target->y) << VAR(ride->e_click_attempts);
+            }
+            return;
+        }
+        // 四次都没消失: 不再连按同一个提示, 等它自己消失; 若实际没成功,
+        // 角色会停在当前滑的终点塔, 交给停点定位处理.
+        LogWarn << "zipline/e/verify/still_visible" << VAR(ride->plan.e_target->x) << VAR(ride->plan.e_target->y) << VAR(ride->e_click_attempts);
+        ride->e_click_verify_at.reset();
+        ride->e_click_attempts = 0;
+        ride->e_prompt_failed = true;
+        ride->last_e_press_at = now;
+        ride->e_scan_deadline = now + std::chrono::milliseconds(kZiplineEScanMaxMs);
+        return;
+    }
+
+    // 上一次重试失败的提示还没消失时, 不把它当成新的 E
+    if (ride->e_prompt_failed) {
+        if (ride->last_e_scan_at && ElapsedMs(*ride->last_e_scan_at, now) < kZiplineEClickVerifyMs) {
+            return;
+        }
+        ride->last_e_scan_at = now;
+        if (ZiplineIoIsZiplineEPromptVisible(io)) {
+            return;
+        }
+        ride->e_prompt_failed = false;
+        return;
+    }
+
+    if (!ride->e_scan_deadline || now > *ride->e_scan_deadline) {
+        return;
+    }
+    // 两个不同 E 至少隔半程最大索距对应的时间
+    if (ride->last_e_press_at && ElapsedMs(*ride->last_e_press_at, now) < kZiplineEMinIntervalMs) {
         return;
     }
     if (ride->last_e_scan_at && ElapsedMs(*ride->last_e_scan_at, now) < kZiplineEScanIntervalMs) {
@@ -667,9 +735,10 @@ void maybe_press_e(ZiplineRide* ride, ZiplineIo* io, std::chrono::steady_clock::
     if (!ZiplineIoPressZiplineE(io)) {
         return;
     }
-    ride->e_pressed = true;
-    LogInfo << "zipline/e/pressed" << VAR(ride->plan.e_target->x) << VAR(ride->plan.e_target->y)
-            << VAR_AS(StageName(ride->stage), stage_name(ride->stage));
+    ride->e_click_attempts = 1;
+    ride->e_click_verify_at = now + std::chrono::milliseconds(kZiplineEClickVerifyMs);
+    ride->e_scan_deadline = now + std::chrono::milliseconds(kZiplineEScanMaxMs);
+    LogInfo << "zipline/e/click" << VAR(ride->plan.e_target->x) << VAR(ride->plan.e_target->y) << VAR(ride->e_click_attempts);
 }
 
 StageResult tick_fired(ZiplineRide* ride, ZiplineIo* io, const ZiplineObservation& obs)
@@ -1000,8 +1069,13 @@ void ResetZiplineHop(ZiplineRide* ride)
     ride->last_fix.reset();
     ride->landing = {};
     ride->aim = {};
-    ride->e_pressed = false;
+    ride->e_press_count = 0;
+    ride->e_click_attempts = 0;
+    ride->e_prompt_failed = false;
     ride->last_e_scan_at.reset();
+    ride->last_e_press_at.reset();
+    ride->e_click_verify_at.reset();
+    ride->e_scan_deadline.reset();
     ride->e_scan_timeout_ms = kZiplineEScanDefaultMs;
     ride->exit_aim = {};
     ride->exit_aim_budget_ms = 0;
@@ -1048,8 +1122,13 @@ void BeginZiplineHop(ZiplineRide* ride, const ZiplineHopPlan& plan, std::chrono:
     ride->pitch_tier = 0;
     ride->last_fix.reset();
     ride->landing = {};
-    ride->e_pressed = false;
+    ride->e_press_count = 0;
+    ride->e_click_attempts = 0;
+    ride->e_prompt_failed = false;
     ride->last_e_scan_at.reset();
+    ride->last_e_press_at.reset();
+    ride->e_click_verify_at.reset();
+    ride->e_scan_deadline.reset();
     ride->e_scan_timeout_ms = kZiplineEScanDefaultMs;
     if (ride->plan.e_target) {
         const double span = std::hypot(ride->plan.mount.x - ride->plan.landing.x, ride->plan.mount.y - ride->plan.landing.y);

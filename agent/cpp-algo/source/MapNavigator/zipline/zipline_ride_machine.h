@@ -28,6 +28,8 @@ bool ZiplineIoLowerPitchTo(ZiplineIo* io, double elevation_deg);
 bool ZiplineIoPressMount(ZiplineIo* io);
 // 滑行中扫 E 提示; 识别到才按键, 返回是否按下
 bool ZiplineIoPressZiplineE(ZiplineIo* io);
+// 只识别 E 提示, 不按键; 用于按下后确认按钮是否消失
+bool ZiplineIoIsZiplineEPromptVisible(ZiplineIo* io);
 void ZiplineIoFireLaunch(ZiplineIo* io);
 void ZiplineIoDismount(ZiplineIo* io);
 void ZiplineIoWait(ZiplineIo* io, int32_t ms);
@@ -113,8 +115,13 @@ struct ZiplineRide
     YawAim aim;
     std::optional<int32_t> aim_budget_ms;
 
-    bool e_pressed = false;
+    int e_press_count = 0;
+    int e_click_attempts = 0;
+    bool e_prompt_failed = false;
     std::optional<std::chrono::steady_clock::time_point> last_e_scan_at;
+    std::optional<std::chrono::steady_clock::time_point> last_e_press_at;
+    std::optional<std::chrono::steady_clock::time_point> e_click_verify_at;
+    std::optional<std::chrono::steady_clock::time_point> e_scan_deadline;
     int32_t e_scan_timeout_ms = kZiplineEScanDefaultMs;
 
     ZiplineMountSpot exit_aim;
