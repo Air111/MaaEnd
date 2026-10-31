@@ -1,9 +1,9 @@
 /**
- * 按「地区-送货点」编辑手工滑索链。
+ * 按「地区-目标点」编辑手工滑索链。
  *
  * 页面只复用只读的 Ziplines.json / zipline_frames.json 与 AutoDelivery 的
- * 送货点列表；保存结果是 debug/record/ZiplineRoutes.json，cpp-algo 运行时
- * 在规划区间终点匹配时直接采用，不再搜索。
+ * 仓储节点、送货终点列表；保存结果是 debug/record/ZiplineRoutes.json，
+ * cpp-algo 运行时在规划区间终点匹配时直接采用，不再搜索。
  */
 
 import {Camera} from "./camera.js";
@@ -301,7 +301,7 @@ function selectTarget(targetId, {force = false} = {}) {
 
 function updateTargetInfo() {
   if (!state.target) {
-    els.targetInfo.textContent = "选择一个送货点后显示对应地图与滑索架。";
+    els.targetInfo.textContent = "选择一个目标点后显示对应地图与滑索架。";
     return;
   }
   const target = state.target;
@@ -496,7 +496,7 @@ function drawGoal() {
   ctx.fillStyle = "#f43f5e";
   ctx.fill();
   ctx.restore();
-  drawLabel(cx, cy - 24, "送货点", "#f43f5e");
+  drawLabel(cx, cy - 24, "目标点", "#f43f5e");
 }
 
 function drawChain() {
@@ -658,7 +658,7 @@ function updateChainUi() {
 
 function updateRouteSummary() {
   if (!state.target) {
-    els.routeSummary.textContent = "起点：选择第一根滑索架后显示；终点：选择送货点后显示。";
+    els.routeSummary.textContent = "起点：选择第一根滑索架后显示；终点：选择目标点后显示。";
     return;
   }
   const goal = Array.isArray(state.target.goal) ? state.target.goal : [0, 0];
@@ -747,7 +747,7 @@ function renderHops() {
 function refreshValidation() {
   els.validation.replaceChildren();
   if (!state.target) {
-    appendValidation("先选择一个送货点。", "muted");
+    appendValidation("先选择一个目标点。", "muted");
     return {ok: false, errors: [], hops: []};
   }
   if (!state.towers.length) {
@@ -872,7 +872,7 @@ async function saveChain() {
     updateChainUi();
     draw();
     if (state.noticeKind === "chain") showNotice("");
-    setStatus("已保存。运行时在这个送货点的规划区间会直接采用这条路径。", "ok");
+    setStatus("已保存。运行时在这个目标点的规划区间会直接采用这条路径。", "ok");
   } catch (error) {
     setStatus(`保存失败：${error && error.message ? error.message : error}`, "error");
   } finally {
@@ -883,7 +883,7 @@ async function saveChain() {
 
 async function deleteChain() {
   if (state.busy || !state.target || !state.accountId || !state.savedRoute) return;
-  if (!window.confirm("删除这个送货点的手工滑索路径？运行时将回到自动查找。")) return;
+  if (!window.confirm("删除这个目标点的手工滑索路径？运行时将回到自动查找。")) return;
   state.busy = true;
   updateChainUi();
   setStatus("正在删除…", "info");

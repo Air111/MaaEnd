@@ -117,6 +117,51 @@ class DeliveryTargetTest(unittest.TestCase):
         self.assertEqual(base_zone_for("unknown"), "")
 
 
+class DepotTargetTest(unittest.TestCase):
+    def test_lists_zipline_depots_and_skips_walk_only_ones(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            routes = root / "Routes"
+            routes.mkdir()
+            catalog = {
+                "depots": [
+                    {
+                        "id": "depot-a",
+                        "name": {"zh_cn": "源石研究园"},
+                        "zip_route_node": "DepotA",
+                    },
+                    {
+                        "id": "depot-b",
+                        "name": {"zh_cn": "供能高地"},
+                        "zip_route_node": "DepotB",
+                        "walk_only": True,
+                    },
+                ],
+                "destinations": [],
+            }
+            (root / "catalog.json").write_text(json.dumps(catalog, ensure_ascii=False), encoding="utf-8")
+            (routes / "Region.json").write_text(
+                json.dumps(
+                    {
+                        "DepotA": _route_node(_navmesh(1043.463, 799.095, deck=93.098), _navmesh(1043.463, 803.314)),
+                        "DepotB": _route_node(_navmesh(500.0, 500.0)),
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            (root / "frames.json").write_text(json.dumps({"frames": [{"zone_name": "map01base"}]}), encoding="utf-8")
+
+            targets = build_delivery_targets(root / "catalog.json", routes, root / "frames.json")
+
+        self.assertEqual(len(targets), 1)
+        target = targets[0]
+        self.assertEqual(target.label, "源石研究园 · 仓储节点")
+        self.assertEqual(target.destinations, ("仓储节点",))
+        self.assertEqual(target.goal, (1043.463, 799.095))
+        self.assertEqual(target.goal_deck_y, 93.098)
+
+
 class SavedRouteTest(unittest.TestCase):
     def test_round_trips_and_replaces_by_account_zone_and_goal(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
