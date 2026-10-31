@@ -33,8 +33,7 @@
         "custom_action_param": {
             "TargetQuantity": 999999,
             "ClampTargetToSliderMax": true,
-            "FineTuneQuantity": 100,
-            "FineTuneFallback": "less",
+            "QuantityTolerance": 100,
             "AvailableQuantity": {
                 "roi": "${AvailableQuantityBoxAdb}",
                 "only_rec": true
