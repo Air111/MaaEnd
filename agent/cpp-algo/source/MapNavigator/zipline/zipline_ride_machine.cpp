@@ -177,8 +177,13 @@ void ZiplineRideMachine::begin(const ZiplineHopPlan& plan)
     launch_fix_.reset();
     last_fix_.reset();
     riding_entered_ = false;
-    e_pressed_ = false;
+    e_press_count_ = 0;
+    e_click_attempts_ = 0;
+    e_prompt_failed_ = false;
     last_e_scan_at_.reset();
+    last_e_press_at_.reset();
+    e_click_verify_at_.reset();
+    e_scan_deadline_.reset();
     e_scan_timeout_ms_ = kZiplineEScanDefaultMs;
     if (plan_.e_target) {
         const double span = std::hypot(plan_.mount.x - plan_.landing.x, plan_.mount.y - plan_.landing.y);
@@ -289,8 +294,13 @@ void ZiplineRideMachine::reset()
     miss_streak_ = 0;
     settle_hits_ = 0;
     riding_entered_ = false;
-    e_pressed_ = false;
+    e_press_count_ = 0;
+    e_click_attempts_ = 0;
+    e_prompt_failed_ = false;
     last_e_scan_at_.reset();
+    last_e_press_at_.reset();
+    e_click_verify_at_.reset();
+    e_scan_deadline_.reset();
     e_scan_timeout_ms_ = kZiplineEScanDefaultMs;
     minimap_back_at_.reset();
     unknown_deadline_.reset();
@@ -622,6 +632,7 @@ StageResult ZiplineRideMachine::tickAiming(const ZiplineObservation& obs, IZipli
     }
     actuator.fireLaunch();
     const auto fired_at = Clock::now();
+    e_scan_deadline_ = fired_at + std::chrono::milliseconds(e_scan_timeout_ms_);
     record_.launches.push_back(ZiplineLaunch {
         .fired_at = fired_at,
         .heading_deg = heading,
@@ -641,13 +652,80 @@ StageResult ZiplineRideMachine::tickAiming(const ZiplineObservation& obs, IZipli
     return {};
 }
 
-// 滑行中才扫; 提示命中即按一次, 成功与否都交给下一次停点的定位判定
+// E 按下后按钮消失才算成功; 没消失就对同一个 E 重试, 两次点击间隔 0.5s.
+// 不同 E 之间还有最小间隔, 避免把同一提示的残留当成下一段.
 void ZiplineRideMachine::maybePressE(IZiplineObserver& observer, Clock::time_point now)
 {
-    if (!plan_.e_target || e_pressed_) {
+    if (!plan_.e_target || plan_.forward_towers.empty()) {
         return;
     }
-    if (record_.launches.empty() || ElapsedMs(record_.launches.back().fired_at, now) > e_scan_timeout_ms_) {
+    if (e_press_count_ >= static_cast<int>(plan_.forward_towers.size())) {
+        return;
+    }
+
+    // 已发过一次点击, 等 0.5s 看按钮是否消失
+    if (e_click_verify_at_) {
+        if (now < *e_click_verify_at_) {
+            return;
+        }
+        if (!observer.isZiplineEPromptVisible()) {
+            ++e_press_count_;
+            // 下限按实际点击时刻算, 不从 0.5s 后的确认时刻再顺延
+            last_e_press_at_ = *e_click_verify_at_ - std::chrono::milliseconds(kZiplineEClickVerifyMs);
+            e_click_verify_at_.reset();
+            e_click_attempts_ = 0;
+            e_prompt_failed_ = false;
+            e_scan_deadline_ = now + std::chrono::milliseconds(kZiplineEScanMaxMs);
+            // 一段连续 E 链可能比单跳久, 每次成功接续后给本段重新计时
+            if (stage_ == ZiplineStage::Riding) {
+                stage_entered_at_ = now;
+            }
+            LogInfo << "zipline/e/pressed" << VAR(plan_.e_target->x) << VAR(plan_.e_target->y) << VAR(e_press_count_)
+                    << VAR(plan_.forward_towers.size()) << VAR_AS(StageName(stage_), stage_name(stage_));
+            return;
+        }
+        if (e_click_attempts_ < kZiplineEClickAttempts) {
+            if (last_e_scan_at_ && ElapsedMs(*last_e_scan_at_, now) < kZiplineEScanIntervalMs) {
+                return;
+            }
+            last_e_scan_at_ = now;
+            if (observer.pressZiplineE()) {
+                ++e_click_attempts_;
+                e_click_verify_at_ = now + std::chrono::milliseconds(kZiplineEClickVerifyMs);
+                e_scan_deadline_ = now + std::chrono::milliseconds(kZiplineEScanMaxMs);
+                LogInfo << "zipline/e/retry" << VAR(plan_.e_target->x) << VAR(plan_.e_target->y) << VAR(e_click_attempts_);
+            }
+            return;
+        }
+        // 四次都没消失: 不再连按同一个提示, 等它自己消失; 若实际没成功,
+        // 角色会停在当前滑的终点塔, 交给停点定位处理.
+        LogWarn << "zipline/e/verify/still_visible" << VAR(plan_.e_target->x) << VAR(plan_.e_target->y) << VAR(e_click_attempts_);
+        e_click_verify_at_.reset();
+        e_click_attempts_ = 0;
+        e_prompt_failed_ = true;
+        last_e_press_at_ = now;
+        e_scan_deadline_ = now + std::chrono::milliseconds(kZiplineEScanMaxMs);
+        return;
+    }
+
+    // 上一次重试失败的提示还没消失时, 不把它当成新的 E
+    if (e_prompt_failed_) {
+        if (last_e_scan_at_ && ElapsedMs(*last_e_scan_at_, now) < kZiplineEClickVerifyMs) {
+            return;
+        }
+        last_e_scan_at_ = now;
+        if (observer.isZiplineEPromptVisible()) {
+            return;
+        }
+        e_prompt_failed_ = false;
+        return;
+    }
+
+    if (!e_scan_deadline_ || now > *e_scan_deadline_) {
+        return;
+    }
+    // 两个不同 E 至少隔半程最大索距对应的时间
+    if (last_e_press_at_ && ElapsedMs(*last_e_press_at_, now) < kZiplineEMinIntervalMs) {
         return;
     }
     if (last_e_scan_at_ && ElapsedMs(*last_e_scan_at_, now) < kZiplineEScanIntervalMs) {
@@ -657,9 +735,10 @@ void ZiplineRideMachine::maybePressE(IZiplineObserver& observer, Clock::time_poi
     if (!observer.pressZiplineE()) {
         return;
     }
-    e_pressed_ = true;
-    LogInfo << "zipline/e/pressed" << VAR(plan_.e_target->x) << VAR(plan_.e_target->y)
-            << VAR_AS(StageName(stage_), stage_name(stage_));
+    e_click_attempts_ = 1;
+    e_click_verify_at_ = now + std::chrono::milliseconds(kZiplineEClickVerifyMs);
+    e_scan_deadline_ = now + std::chrono::milliseconds(kZiplineEScanMaxMs);
+    LogInfo << "zipline/e/click" << VAR(plan_.e_target->x) << VAR(plan_.e_target->y) << VAR(e_click_attempts_);
 }
 
 // 滑行中小地图隐藏, 定位连断就是滑出去了; 空响时人还在上索架上, 小地图照常显示
