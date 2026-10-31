@@ -379,6 +379,30 @@ export function buildSavedRoutePayload(accountId, target, chainTowers, eHops = [
   };
 }
 
+/**
+ * Turn a chain into the hop keys the E flags are stored under.
+ * @param {number[]} indices
+ * @returns {string[]}
+ */
+export function hopKeysOf(indices) {
+  const chain = Array.isArray(indices) ? indices : [];
+  return Array.from({length: Math.max(0, chain.length - 1)}, (_, position) => `${chain[position]}->${chain[position + 1]}`);
+}
+
+/**
+ * Hop keys the bulk "set all E" action should mark.
+ *
+ * The first hop is skipped: its start tower is the chain's takeoff tower, so the
+ * ride into it never happens and the runtime never reads `e_hops[0]` (it uses
+ * `e_hops[hop + 1]` for the hop being ridden). Keeping it out of the bulk action
+ * matches the disabled first checkbox.
+ * @param {number[]} indices
+ * @returns {string[]}
+ */
+export function bulkEHopKeys(indices) {
+  return hopKeysOf(indices).slice(1);
+}
+
 /** @param {Object} tower @param {Object} frameConfig @returns {string} */
 export function towerTypeName(tower, frameConfig) {
   const type = typeOf(frameConfig, tower && tower.templateId);
