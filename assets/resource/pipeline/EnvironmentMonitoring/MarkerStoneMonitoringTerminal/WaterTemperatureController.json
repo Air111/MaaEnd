@@ -227,7 +227,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "WaterTemperatureControllerInQuickTeleportMap"
+            "WaterTemperatureControllerGoTargetAfterTrack"
         ]
     },
     "AlreadyTrackedWaterTemperatureController": {
@@ -241,7 +241,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "WaterTemperatureControllerOpenTrackedMissionMap"
+            "WaterTemperatureControllerGoTargetAfterTracked"
         ]
     },
     "WaterTemperatureControllerOpenTrackedMissionMap": {
@@ -315,7 +315,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToWaterTemperatureControllerMove"
+            "WaterTemperatureControllerTeleportDone"
         ]
     },
     "WaterTemperatureControllerNotAdapted": {
@@ -326,6 +326,124 @@
         "focus": {
             "Node.Recognition.Succeeded": "$task.EnvironmentMonitoring.not_adapted"
         }
+    },
+    "WaterTemperatureControllerGoTarget": {
+        "desc": "判断是否使用保存的滑索路径前往净水温控装置；没有保存路径时走原有传送流程",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                333.71,
+                2155.67
+            ],
+            "goal_deck_y": 265.55,
+            "zip_move": "WaterTemperatureControllerMoveWithZipline",
+            "fallback": "GoToWaterTemperatureController"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "WaterTemperatureControllerMoveWithZipline",
+            "GoToWaterTemperatureControllerMove"
+        ]
+    },
+    "WaterTemperatureControllerGoTargetAfterTrack": {
+        "desc": "刚点击追踪，判断是否使用保存的滑索路径前往净水温控装置",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                333.71,
+                2155.67
+            ],
+            "goal_deck_y": 265.55,
+            "zip_move": "WaterTemperatureControllerMoveWithZipline",
+            "fallback": "WaterTemperatureControllerInQuickTeleportMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "WaterTemperatureControllerMoveWithZipline",
+            "GoToWaterTemperatureControllerMove"
+        ]
+    },
+    "WaterTemperatureControllerGoTargetAfterTracked": {
+        "desc": "任务已在追踪中，判断是否使用保存的滑索路径前往净水温控装置",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                333.71,
+                2155.67
+            ],
+            "goal_deck_y": 265.55,
+            "zip_move": "WaterTemperatureControllerMoveWithZipline",
+            "fallback": "WaterTemperatureControllerOpenTrackedMissionMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "WaterTemperatureControllerMoveWithZipline",
+            "GoToWaterTemperatureControllerMove"
+        ]
+    },
+    "WaterTemperatureControllerMoveWithZipline": {
+        "desc": "沿保存的滑索路径前往净水温控装置",
+        // 只有 ZiplineRouteGoAction 命中手工链时才打开；默认禁用，保证没有保存路径时不启用滑索。
+        "enabled": false,
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "MapNavigateAction",
+        "custom_action_param": {
+            "path": [
+                {
+                    "action": "ZONE",
+                    "zone_id": "Wuling_Base"
+                },
+                {
+                    "action": "NAVMESH",
+                    "target": [
+                        333.71,
+                        2155.67
+                    ],
+                    "target_deck_y": 265.55
+                },
+                {
+                    "action": "HEADING",
+                    "angle": 255
+                }
+            ],
+            "zip": true
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "WaterTemperatureControllerTakePhoto"
+        ],
+        // 滑索导航失败时退回同一目标点的步行路线。
+        "on_error": [
+            "GoToWaterTemperatureControllerMove"
+        ],
+        "focus": {
+            "Node.Action.Succeeded": {
+                "trace": true
+            },
+            "Node.Action.Failed": {
+                "trace": true
+            }
+        }
+    },
+    "WaterTemperatureControllerTeleportDone": {
+        "desc": "传送流程结束，交回目标点决策节点继续",
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0
     },
     "GoToWaterTemperatureController": {
         "desc": "前往净水温控装置，先回到大世界再进行判断",
@@ -361,7 +479,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToWaterTemperatureControllerMove"
+            "WaterTemperatureControllerTeleportDone"
         ]
     },
     "GoToWaterTemperatureControllerNotAtStartPos": {
@@ -377,7 +495,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToWaterTemperatureControllerMove"
+            "WaterTemperatureControllerTeleportDone"
         ]
     },
     "GoToWaterTemperatureControllerMove": {

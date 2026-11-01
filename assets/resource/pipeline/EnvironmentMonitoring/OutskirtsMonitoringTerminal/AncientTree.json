@@ -227,7 +227,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "AncientTreeInQuickTeleportMap"
+            "AncientTreeGoTargetAfterTrack"
         ]
     },
     "AlreadyTrackedAncientTree": {
@@ -241,7 +241,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "AncientTreeOpenTrackedMissionMap"
+            "AncientTreeGoTargetAfterTracked"
         ]
     },
     "AncientTreeOpenTrackedMissionMap": {
@@ -315,7 +315,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToAncientTreeMove"
+            "AncientTreeTeleportDone"
         ]
     },
     "AncientTreeNotAdapted": {
@@ -326,6 +326,120 @@
         "focus": {
             "Node.Recognition.Succeeded": "$task.EnvironmentMonitoring.not_adapted"
         }
+    },
+    "AncientTreeGoTarget": {
+        "desc": "判断是否使用保存的滑索路径前往古树；没有保存路径时走原有传送流程",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                829.41,
+                2576.94
+            ],
+            "zip_move": "AncientTreeMoveWithZipline",
+            "fallback": "GoToAncientTree"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "AncientTreeMoveWithZipline",
+            "GoToAncientTreeMove"
+        ]
+    },
+    "AncientTreeGoTargetAfterTrack": {
+        "desc": "刚点击追踪，判断是否使用保存的滑索路径前往古树",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                829.41,
+                2576.94
+            ],
+            "zip_move": "AncientTreeMoveWithZipline",
+            "fallback": "AncientTreeInQuickTeleportMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "AncientTreeMoveWithZipline",
+            "GoToAncientTreeMove"
+        ]
+    },
+    "AncientTreeGoTargetAfterTracked": {
+        "desc": "任务已在追踪中，判断是否使用保存的滑索路径前往古树",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                829.41,
+                2576.94
+            ],
+            "zip_move": "AncientTreeMoveWithZipline",
+            "fallback": "AncientTreeOpenTrackedMissionMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "AncientTreeMoveWithZipline",
+            "GoToAncientTreeMove"
+        ]
+    },
+    "AncientTreeMoveWithZipline": {
+        "desc": "沿保存的滑索路径前往古树",
+        // 只有 ZiplineRouteGoAction 命中手工链时才打开；默认禁用，保证没有保存路径时不启用滑索。
+        "enabled": false,
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "MapNavigateAction",
+        "custom_action_param": {
+            "path": [
+                {
+                    "action": "ZONE",
+                    "zone_id": "Wuling_Base"
+                },
+                {
+                    "action": "NAVMESH",
+                    "target": [
+                        829.41,
+                        2576.94
+                    ]
+                },
+                {
+                    "action": "HEADING",
+                    "angle": 245
+                }
+            ],
+            "zip": true
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "AncientTreeTakePhoto"
+        ],
+        // 滑索导航失败时退回同一目标点的步行路线。
+        "on_error": [
+            "GoToAncientTreeMove"
+        ],
+        "focus": {
+            "Node.Action.Succeeded": {
+                "trace": true
+            },
+            "Node.Action.Failed": {
+                "trace": true
+            }
+        }
+    },
+    "AncientTreeTeleportDone": {
+        "desc": "传送流程结束，交回目标点决策节点继续",
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0
     },
     "GoToAncientTree": {
         "desc": "前往古树，先回到大世界再进行判断",
@@ -361,7 +475,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToAncientTreeMove"
+            "AncientTreeTeleportDone"
         ]
     },
     "GoToAncientTreeNotAtStartPos": {
@@ -377,7 +491,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToAncientTreeMove"
+            "AncientTreeTeleportDone"
         ]
     },
     "GoToAncientTreeMove": {

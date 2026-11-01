@@ -60,6 +60,7 @@ import (
 	"github.com/MaaXYZ/MaaEnd/agent/go-service/trialofswordmancy"
 	"github.com/MaaXYZ/MaaEnd/agent/go-service/visitfriends"
 	webevent202605 "github.com/MaaXYZ/MaaEnd/agent/go-service/webevent/202605"
+	"github.com/MaaXYZ/MaaEnd/agent/go-service/zipline"
 	"github.com/MaaXYZ/MaaEnd/agent/go-service/ziplineimport"
 	"github.com/rs/zerolog/log"
 )
@@ -126,6 +127,7 @@ func registerAll() {
 	itemtransfer.Register()
 	outposttrading.Register()
 	webevent202605.Register()
+	zipline.Register()
 	ziplineimport.Register()
 	pullcount.Register()
 	trialofswordmancy.Register()

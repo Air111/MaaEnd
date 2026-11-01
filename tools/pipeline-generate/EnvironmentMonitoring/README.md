@@ -102,4 +102,6 @@ pnpm exec maa-pipeline-generate --config terminals-config.json
 
 `Replace` 可用于所有已适配路线，不改变路线类型。直拍必须经过游戏实测确认，不能用来代替尚未录制的路线数据。寻路路线一律用 `NavPath`，普通传送再补 `NavZoneId` / `NavAssert`。拍照目标未命中时由公共 `CameraScanAction` 自动执行九宫格与 fallback 镜头扫描，不需要路线级镜头方向配置。
 
+> 寻路路线且终点是 base 像素坐标时，生成器会额外生成滑索分支（`${Id}GoTarget*`、`${Id}MoveWithZipline`、`${Id}TeleportDone`）。分支由 `ZiplineRouteGoAction` 在运行时读取 `ZiplineRoutes.json` 决定：有匹配的手工链就先用链上的 `entry` 传送到离滑索起点最近的锚点再启用滑索，否则走原来的传送与步行流程。终点写在 `target_tier` 里的观察点不生成分支——编辑器换算不出 base 终点，保存的路径永远匹配不上；需要滑索时先把 `NavPath` 改成 base 像素坐标。手工链在 MapNavigator 的「滑索路线」页面里录，目标点类型选「环境监测」。
+
 > 完整维护流程见 `docs/zh_cn/developers/tasks/environment-monitoring-maintain.md`。

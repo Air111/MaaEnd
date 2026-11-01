@@ -327,6 +327,109 @@
             "Node.Recognition.Succeeded": "$task.EnvironmentMonitoring.not_adapted"
         }
     },
+    "WitheredBranchesGoTarget": {
+        "desc": "判断是否使用保存的滑索路径前往枯枝；没有保存路径时走原有传送流程",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                0,
+                0
+            ],
+            "zip_move": "WitheredBranchesMoveWithZipline",
+            "fallback": "GoToWitheredBranches"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "WitheredBranchesMoveWithZipline",
+            "GoToWitheredBranchesMove"
+        ]
+    },
+    "WitheredBranchesGoTargetAfterTrack": {
+        "desc": "刚点击追踪，判断是否使用保存的滑索路径前往枯枝",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                0,
+                0
+            ],
+            "zip_move": "WitheredBranchesMoveWithZipline",
+            "fallback": "WitheredBranchesInQuickTeleportMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "WitheredBranchesMoveWithZipline",
+            "GoToWitheredBranchesMove"
+        ]
+    },
+    "WitheredBranchesGoTargetAfterTracked": {
+        "desc": "任务已在追踪中，判断是否使用保存的滑索路径前往枯枝",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                0,
+                0
+            ],
+            "zip_move": "WitheredBranchesMoveWithZipline",
+            "fallback": "WitheredBranchesOpenTrackedMissionMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "WitheredBranchesMoveWithZipline",
+            "GoToWitheredBranchesMove"
+        ]
+    },
+    "WitheredBranchesMoveWithZipline": {
+        "desc": "沿保存的滑索路径前往枯枝",
+        // 只有 ZiplineRouteGoAction 命中手工链时才打开；默认禁用，保证没有保存路径时不启用滑索。
+        "enabled": false,
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "MapNavigateAction",
+        "custom_action_param": {
+            "path": [
+                {
+                    "action": "HEADING",
+                    "angle": 133
+                }
+            ],
+            "zip": true
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "WitheredBranchesTakePhoto"
+        ],
+        // 滑索导航失败时退回同一目标点的步行路线。
+        "on_error": [
+            "GoToWitheredBranchesMove"
+        ],
+        "focus": {
+            "Node.Action.Succeeded": {
+                "trace": true
+            },
+            "Node.Action.Failed": {
+                "trace": true
+            }
+        }
+    },
+    "WitheredBranchesTeleportDone": {
+        "desc": "传送流程结束，交回目标点决策节点继续",
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0
+    },
     "GoToWitheredBranches": {
         "desc": "前往枯枝，先回到大世界再进行判断",
         "pre_delay": 0,
