@@ -12,22 +12,7 @@ MaaEnd 使用由 zmdmap 数据 CI 生成并发布的精简游戏数据，落在 
 
 这些文件都是按任务需要裁剪出的游戏数据，不是完整的上游数据快照：除了最前面的两个元数据字段（`version`：这份数据来自哪一版游戏数据；`sha256`：这份数据**原始形态**（只带世界坐标的那一份）的内容指纹，入库投影后照抄、不重算），不放别的来源元数据，字段说明也不放进 JSON（字段含义见 [`tools/zmdmap`](../zmdmap/README.md) 与各数据集模块）。
 
-## 改文件前先确认是不是生成产物
-
-`assets/` 下不少 JSON 是生成器的产物，直接改会在下一次生成时被整份覆盖。动手前先看这几点：
-
-1. 目标文件是否落在某个生成器 `*config.json` 的 `outputDir` 下——`tools/pipeline-generate/` 下每个任务目录都有这样的配置；
-2. 同目录是否有 `template.json(c)` + `data.mjs` / `data.json`，文件名是否匹配它的 `outputPattern`（如 `${Station}/${Id}.json`）或 `outputFile`（合并输出）；
-3. 同一任务下多个文件是否结构一致、只有 `${Id}`、坐标、文案不同——这通常就是模板展开的结果；
-4. 需要手写的内容是否本来就在生成器覆盖范围之外（例如环境监测的 `Button.json`、`Locations.json`、`TakePhoto.json`）。
-
-命中的话改模板与数据源，再重跑对应生成命令；不要手改产物。没有 pnpm 时可以直接用仓库里的生成器：
-
-```shell
-node tools/pipeline-generate/run-all.mjs <任务目录>   # 例：EnvironmentMonitoring
-```
-
-例子：`assets/resource/pipeline/EnvironmentMonitoring/<终端>/<观察点>.json` 一共 32 个，全部由 `EnvironmentMonitoring/generator/` 的 `template.json` + `data.mjs` + `config.json` 生成。想给「前往目标点」加滑索分支时，改的是模板和 `data.mjs`，再重跑上面的命令；手改那 32 个文件会在下次生成时丢失。
+修改 `assets/` 下的 JSON 前，先确认它是不是生成器产物：看同目录的 `config.json`、`template.json(c)`、`data.mjs`，命中就改模板/数据源再重跑生成器，不要手改产物。
 
 ## 数据流
 
