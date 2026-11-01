@@ -65,7 +65,8 @@ class WebResourceTest(unittest.TestCase):
             path = Path(temp_dir) / "ZiplineRoutes.json"
             with (
                 patch.object(serve, "ZIPLINE_ROUTES", path),
-                patch.object(serve, "build_delivery_targets", return_value=[]),
+                patch.object(serve, "build_targets", return_value=[]),
+                patch.object(serve, "build_teleport_entries", return_value=[]),
             ):
                 self.assertEqual(asyncio.run(serve.api_zipline_routes())["routes"], [])
                 saved = asyncio.run(
