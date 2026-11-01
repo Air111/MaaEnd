@@ -1,5 +1,5 @@
 /**
- * Pure helpers for the per-delivery-point zipline chain editor.
+ * Pure helpers for the per-target zipline chain editor.
  *
  * The runtime (cpp-algo `ZiplineRoutes` + `PlanZiplineRoute`) uses the same
  * account/zone/goal key and the same geometric checks; this module only
@@ -355,14 +355,15 @@ export function findReusableZiplineSegment(
 /**
  * Build the POST body for one chain. The tower order is the click order.
  * @param {string} accountId
- * @param {Object} target delivery target from the API
+ * @param {Object} target editable target from the API
  * @param {Array<Object>} chainTowers selected tower objects in order
  * @param {boolean[]} [eHops] per-hop E-chain flags, one per tower gap
+ * @param {string} [entry] teleport entry node the runtime should run first
  * @returns {Object}
  */
-export function buildSavedRoutePayload(accountId, target, chainTowers, eHops = []) {
+export function buildSavedRoutePayload(accountId, target, chainTowers, eHops = [], entry = "") {
   const hopCount = Math.max(0, chainTowers.length - 1);
-  return {
+  const payload = {
     account_id: String(accountId || ""),
     zone_name: String(target && target.zone_name ? target.zone_name : ""),
     label: String(target && target.label ? target.label : ""),
@@ -377,6 +378,41 @@ export function buildSavedRoutePayload(accountId, target, chainTowers, eHops = [
     })),
     e_hops: Array.from({length: hopCount}, (_, index) => eHops[index] === true),
   };
+  const normalizedEntry = String(entry || "").trim();
+  if (normalizedEntry) payload.entry = normalizedEntry;
+  return payload;
+}
+
+/**
+ * Pick the pipeline teleport entry whose anchor is closest to a base-pixel
+ * point. Environment monitoring uses it to start from the zipline's own
+ * takeoff point instead of the mission's nearest teleport.
+ * @param {Array<Object>} teleports entries from the API
+ * @param {number[]} point base-pixel point
+ * @param {string} baseZone base zone such as map02base
+ * @returns {?Object}
+ */
+export function nearestTeleport(teleports, point, baseZone) {
+  if (!Array.isArray(teleports) || !Array.isArray(point) || point.length < 2) return null;
+  const x = finite(point[0]);
+  const y = finite(point[1]);
+  if (x === null || y === null) return null;
+  const wantedZone = String(baseZone || "");
+  let best = null;
+  let bestDistance = Infinity;
+  for (const teleport of teleports) {
+    if (!teleport || String(teleport.base_zone || "") !== wantedZone) continue;
+    const at = Array.isArray(teleport.at) ? teleport.at : [];
+    const ax = finite(at[0]);
+    const ay = finite(at[1]);
+    if (ax === null || ay === null) continue;
+    const distance = Math.hypot(ax - x, ay - y);
+    if (distance < bestDistance) {
+      best = teleport;
+      bestDistance = distance;
+    }
+  }
+  return best;
 }
 
 /**
@@ -386,7 +422,10 @@ export function buildSavedRoutePayload(accountId, target, chainTowers, eHops = [
  */
 export function hopKeysOf(indices) {
   const chain = Array.isArray(indices) ? indices : [];
-  return Array.from({length: Math.max(0, chain.length - 1)}, (_, position) => `${chain[position]}->${chain[position + 1]}`);
+  return Array.from(
+    {length: Math.max(0, chain.length - 1)},
+    (_, position) => `${chain[position]}->${chain[position + 1]}`,
+  );
 }
 
 /**

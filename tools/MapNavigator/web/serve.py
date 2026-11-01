@@ -22,7 +22,7 @@
   GET  /api/zone-ids          -> assert 模式 zone 下拉可选值 (list_available_zone_ids)
   GET  /api/zipline-frames    -> 滑索世界坐标到 base 底图的只读标定
   GET  /api/zipline-records   -> 当前安装目录的只读滑索记录
-  GET  /api/zipline-routes    -> 按地区-送货点保存的手工滑索链与可编辑终点
+  GET  /api/zipline-routes    -> 按地区-目标点保存的手工滑索链、可编辑目标点与传送锚点
   POST /api/zipline-routes    -> 覆盖保存一条手工滑索链
   DELETE /api/zipline-routes  -> 删除一条手工滑索链
   GET  /mesh/{zone_id}        -> 某几何区的 NMSH 二进制网格缓冲 (application/octet-stream)
@@ -106,7 +106,8 @@ from settings_store import (  # noqa: E402
 )
 from zipline_routes import (  # noqa: E402
     SavedZiplineRoute,
-    build_delivery_targets,
+    build_targets,
+    build_teleport_entries,
     delete_saved_route,
     load_saved_routes,
     normalize_saved_route,
@@ -637,7 +638,8 @@ def _zipline_routes_payload(
         "error": error,
     }
     if include_targets:
-        payload["targets"] = [target.as_dict() for target in build_delivery_targets()]
+        payload["targets"] = [target.as_dict() for target in build_targets()]
+        payload["teleports"] = build_teleport_entries()
     return payload
 
 

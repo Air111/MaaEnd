@@ -157,6 +157,37 @@ select {
   font-size: 11px;
 }
 
+.kinds {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.kind-btn {
+  height: var(--h-control);
+  border: 1px solid var(--border-color);
+  border-radius: var(--r-sm);
+  background: var(--inset-bg);
+  color: var(--text-secondary);
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color var(--motion),
+    border-color var(--motion),
+    color var(--motion);
+}
+
+.kind-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.kind-btn.is-active {
+  border-color: rgba(34, 211, 238, 0.55);
+  background: rgba(34, 211, 238, 0.14);
+  color: #a5f3fc;
+}
+
 .combo,
 .entry {
   width: 100%;

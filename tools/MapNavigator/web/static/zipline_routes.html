@@ -23,6 +23,15 @@
             <span>滑索账号</span>
             <select id="account" class="combo"></select>
           </label>
+          <div class="field">
+            <span>目标点类型</span>
+            <div class="kinds" role="group" aria-label="目标点类型">
+              <button id="kind-delivery" class="kind-btn is-active" type="button" data-kind="delivery">送货</button>
+              <button id="kind-environment" class="kind-btn" type="button" data-kind="environment_monitoring">
+                环境监测
+              </button>
+            </div>
+          </div>
           <label class="field">
             <span>目标点</span>
             <select id="target" class="combo"></select>
@@ -79,6 +88,10 @@
           <p>紫色圆点是已记录的滑索架，灰色圆点未通电、运行时会被跳过。只有供电且几何可连接的编号才能保存。</p>
           <p>
             保存后，运行时只在这个目标点的规划区间直接按手工链走；换账号、重新导入坐标导致架子认不回、某跳走不通或本轮已失败时，会自动回退到查找。
+          </p>
+          <p>
+            环境监测会按第一站的坐标，自动挑离它最近的传送锚点并写进路径的
+            <code>entry</code>；送货任务仍用 AutoDelivery 自己的快捷传送。
           </p>
           <p>保存位置：<code id="routes-path">debug/record/ZiplineRoutes.json</code></p>
         </section>

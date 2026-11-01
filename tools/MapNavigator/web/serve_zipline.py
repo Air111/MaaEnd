@@ -30,7 +30,8 @@ sys.path.insert(0, str(TOOL_DIR))
 from model import resolve_zone_image  # noqa: E402
 from zipline_routes import (  # noqa: E402
     SavedZiplineRoute,
-    build_delivery_targets,
+    build_targets,
+    build_teleport_entries,
     delete_saved_route,
     load_saved_routes,
     normalize_saved_route,
@@ -58,10 +59,15 @@ def _routes_payload(*, include_targets: bool) -> dict[str, Any]:
     }
     if include_targets:
         try:
-            payload["targets"] = [target.as_dict() for target in build_delivery_targets()]
+            payload["targets"] = [target.as_dict() for target in build_targets()]
         except (OSError, ValueError) as exc:
             payload["targets"] = []
-            payload["error"] = f"读取 AutoDelivery 送货点失败：{exc}"
+            payload["error"] = f"读取可编辑目标点失败：{exc}"
+        try:
+            payload["teleports"] = build_teleport_entries()
+        except (OSError, ValueError) as exc:
+            payload["teleports"] = []
+            payload["error"] = f"读取传送锚点失败：{exc}"
     return payload
 
 
