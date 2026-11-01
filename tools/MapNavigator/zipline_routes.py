@@ -4,8 +4,14 @@ cpp-algo 的 ``ZiplineRoutes`` 读取同一份 ``debug/record/ZiplineRoutes.json
 规划区间终点与 ``goal`` 匹配、且手工链每根架子都能在当前账号的已通电记录里认回时，
 运行时直接按这条链走，不再搜索；任何一步不成立都会退回原来的自动查找。
 
-这里同时负责枚举可编辑的目标点，供 MapNavigator 页面使用：AutoDelivery 的滑索变体路线
-既覆盖送货终点，也覆盖仓储节点（显示为「地区 · 仓储节点」）。
+这里同时负责枚举可编辑的目标点，供 MapNavigator 页面使用：
+
+- ``delivery``：AutoDelivery 的仓储节点与送货终点，直接读生成的滑索变体路线；
+- ``environment_monitoring``：环境监测观察点，路线来自 ``routes.json`` 的 ``NavPath``。
+
+两类目标点共用 ``(account_id, zone_name, goal)`` 这一把键，所以运行时不需要知道它们
+来自哪个任务；环境监测额外需要一条「传送到离滑索起点最近的锚点」的入口，由页面在保存时
+算好写进 ``entry``（可选字段，旧文件和旧版 cpp-algo 都会忽略）。
 """
 
 from __future__ import annotations
@@ -14,6 +20,7 @@ import contextlib
 import json
 import math
 import os
+import re
 import tempfile
 import time
 from dataclasses import dataclass
@@ -25,7 +32,25 @@ from json_import import load_jsonc
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 AUTODELIVERY_CATALOG = PROJECT_ROOT / "assets" / "data" / "AutoDelivery" / "catalog.json"
 AUTODELIVERY_ROUTES = PROJECT_ROOT / "assets" / "resource" / "pipeline" / "AutoDelivery" / "Routes"
+ENVIRONMENT_MONITORING_ROUTES = (
+    PROJECT_ROOT / "tools" / "pipeline-generate" / "EnvironmentMonitoring" / "routes.json"
+)
 ZIPLINE_FRAMES = PROJECT_ROOT / "assets" / "data" / "MapNavigator" / "zipline_frames.json"
+TELEPORT_NODE_DIR = PROJECT_ROOT / "assets" / "resource" / "pipeline"
+TELEPORT_MANAGER_NODES = TELEPORT_NODE_DIR / "SceneManager" / "SceneTeleportAnchor.json"
+TELEPORT_INTERFACE_NODES = TELEPORT_NODE_DIR / "Interface" / "SceneTeleportAnchor.json"
+
+TARGET_KIND_DELIVERY = "delivery"
+TARGET_KIND_ENVIRONMENT_MONITORING = "environment_monitoring"
+TARGET_KIND_LABELS = {
+    TARGET_KIND_DELIVERY: "送货",
+    TARGET_KIND_ENVIRONMENT_MONITORING: "环境监测",
+}
+# 传送锚点数据按大区标注，滑索标定按 base 区；只映射有滑索数据的两个大区
+REGION_BASE_ZONES = {
+    "ValleyIV": "map01base",
+    "Wuling": "map02base",
+}
 
 ROUTES_VERSION = 1
 # 与 cpp-algo ZiplineRoutes 的 kGoalMatchWu 保持同一量级
@@ -48,15 +73,17 @@ _ROUTES_README = [
     "按 (account_id, zone_name, goal) 指定的手工滑索链；cpp-algo 只在该区间终点匹配时使用。",
     "goal 是 navmesh base 像素坐标；towers 是世界坐标，重新导入滑索记录后仍按世界坐标认架子。",
     "e_hops 与 towers 逐跳对应，true 表示这一跳的起点塔设置了自动终点；实际按 E 在上一段，第一条跳没有上一段，运行时忽略。",
+    "entry 可选，是环境监测等任务在起飞前要执行的传送入口节点；旧文件没有该字段时按任务原有传送流程走。",
     "手工链里的架子未通电、已删除、某跳走不通或本轮已失败过时，运行时会退回自动查找。",
 ]
 
 
 @dataclass(frozen=True)
-class DeliveryLegTarget:
-    """AutoDelivery 某个送货点的一条滑索规划区间。"""
+class ZiplineTarget:
+    """一个可编辑目标点的一条滑索规划区间。"""
 
     id: str
+    kind: str
     label: str
     area: str
     destinations: tuple[str, ...]
@@ -71,6 +98,7 @@ class DeliveryLegTarget:
     def as_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
+            "kind": self.kind,
             "label": self.label,
             "area": self.area,
             "destinations": list(self.destinations),
@@ -82,6 +110,10 @@ class DeliveryLegTarget:
             "leg_index": self.leg_index,
             "leg_count": self.leg_count,
         }
+
+
+# 旧名字保留给既有调用方与测试
+DeliveryLegTarget = ZiplineTarget
 
 
 @dataclass(frozen=True)
@@ -113,9 +145,12 @@ class SavedZiplineRoute:
     # 与 towers 逐跳对应; True 表示这一跳的起点塔设置了自动终点.
     # 实际按 E 发生在进入该起点塔的上一段; 第一条跳没有上一段, 运行时忽略.
     e_hops: tuple[bool, ...] = ()
+    # 可选: 起飞前要执行的传送入口节点. 环境监测用它去离滑索起点最近的锚点;
+    # 送货任务沿用 AutoDelivery 自己的快捷传送, 一般留空.
+    entry: str = ""
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "account_id": self.account_id,
             "zone_name": self.zone_name,
             "label": self.label,
@@ -124,6 +159,9 @@ class SavedZiplineRoute:
             "towers": [tower.as_dict() for tower in self.towers],
             "e_hops": list(self.e_hops),
         }
+        if self.entry:
+            payload["entry"] = self.entry
+        return payload
 
 
 def base_zone_for(zone_id: str) -> str:
@@ -141,7 +179,7 @@ def build_delivery_targets(
     catalog_path: Path = AUTODELIVERY_CATALOG,
     routes_dir: Path = AUTODELIVERY_ROUTES,
     frames_path: Path = ZIPLINE_FRAMES,
-) -> list[DeliveryLegTarget]:
+) -> list[ZiplineTarget]:
     """列出所有带滑索变体的 AutoDelivery 目标点（仓储节点 + 送货终点），按终点去重。"""
     zone_names = _frame_zone_names(frames_path)
     if not zone_names:
@@ -192,7 +230,7 @@ def build_delivery_targets(
             if goal_deck_y is not None and entry["goal_deck_y"] is None:
                 entry["goal_deck_y"] = goal_deck_y
 
-    targets: list[DeliveryLegTarget] = []
+    targets: list[ZiplineTarget] = []
     for entry in merged.values():
         area = " / ".join(entry["areas"]) or "未分区"
         destinations = " / ".join(entry["destinations"]) or "未命名目标点"
@@ -202,8 +240,9 @@ def build_delivery_targets(
             label += f"（第 {entry['leg_index']}/{leg_count} 段）"
         goal_x, goal_y = entry["goal"]
         targets.append(
-            DeliveryLegTarget(
-                id=f"{entry['zone_name']}|{goal_x:.3f}|{goal_y:.3f}",
+            ZiplineTarget(
+                id=f"{TARGET_KIND_DELIVERY}|{entry['zone_name']}|{goal_x:.3f}|{goal_y:.3f}",
+                kind=TARGET_KIND_DELIVERY,
                 label=label,
                 area=area,
                 destinations=tuple(entry["destinations"]),
@@ -220,6 +259,125 @@ def build_delivery_targets(
     return targets
 
 
+def build_environment_monitoring_targets(
+    routes_path: Path = ENVIRONMENT_MONITORING_ROUTES,
+    frames_path: Path = ZIPLINE_FRAMES,
+) -> list[ZiplineTarget]:
+    """列出环境监测观察点的寻路终点；传送后直拍的观察点没有终点，不参与编辑。"""
+    zone_names = _frame_zone_names(frames_path)
+    if not zone_names or not Path(routes_path).is_file():
+        return []
+    entries = load_jsonc(routes_path)
+    if not isinstance(entries, list):
+        return []
+
+    targets: list[ZiplineTarget] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        path = entry.get("NavPath")
+        if not isinstance(path, list) or not path:
+            continue
+        mission_id = str(entry.get("MissionId") or "").strip()
+        name = str(entry.get("Name") or "").strip()
+        if not mission_id or not name:
+            continue
+        zone_id = str(entry.get("NavZoneId") or _first_zone_id(path)).strip()
+        zone_name = base_zone_for(zone_id)
+        if not zone_name or zone_name not in zone_names:
+            continue
+        # tier 局部坐标要在运行时投影到 base 才成为区间终点，编辑器没有投影数据，
+        # 列出来只会存成一条永远匹配不上的路径。
+        if _ends_in_tier_coordinates(path):
+            continue
+        legs = _legs_of_route(path)
+        for leg_index, (goal_x, goal_y, goal_deck_y) in enumerate(legs, start=1):
+            targets.append(
+                ZiplineTarget(
+                    id=f"{TARGET_KIND_ENVIRONMENT_MONITORING}|{mission_id}|{leg_index}",
+                    kind=TARGET_KIND_ENVIRONMENT_MONITORING,
+                    label=name,
+                    area=TARGET_KIND_LABELS[TARGET_KIND_ENVIRONMENT_MONITORING],
+                    destinations=(name,),
+                    route_node="",
+                    zone_id=zone_id,
+                    zone_name=zone_name,
+                    goal=(round(float(goal_x), 3), round(float(goal_y), 3)),
+                    goal_deck_y=goal_deck_y,
+                    leg_index=leg_index,
+                    leg_count=len(legs),
+                )
+            )
+    targets.sort(key=lambda target: (target.area, target.label, target.leg_index, target.goal))
+    return targets
+
+
+def build_targets(
+    catalog_path: Path = AUTODELIVERY_CATALOG,
+    routes_dir: Path = AUTODELIVERY_ROUTES,
+    frames_path: Path = ZIPLINE_FRAMES,
+    environment_routes_path: Path = ENVIRONMENT_MONITORING_ROUTES,
+) -> list[ZiplineTarget]:
+    """两类可编辑目标点：送货（仓储节点 + 终点）与环境监测观察点。"""
+    delivery = build_delivery_targets(catalog_path, routes_dir, frames_path)
+    environment = build_environment_monitoring_targets(environment_routes_path, frames_path)
+    return [*delivery, *environment]
+
+
+def build_teleport_entries(
+    manager_path: Path = TELEPORT_MANAGER_NODES,
+    interface_path: Path = TELEPORT_INTERFACE_NODES,
+) -> list[dict[str, Any]]:
+    """列出可在 Pipeline 里直接调用的大地图传送锚点及其 base 像素坐标。
+
+    环境监测需要「传送到离滑索起点最近的锚点」，页面按这些坐标挑最近的一个，
+    并把它的入口节点名写进手工链的 ``entry``。
+    """
+    if not Path(manager_path).is_file() or not Path(interface_path).is_file():
+        return []
+    manager = load_jsonc(manager_path)
+    interface = load_jsonc(interface_path)
+    if not isinstance(manager, dict) or not isinstance(interface, dict):
+        return []
+
+    private: dict[str, dict[str, Any]] = {}
+    for node_name, node in manager.items():
+        if not isinstance(node, dict):
+            continue
+        param = node.get("custom_recognition_param")
+        if not isinstance(param, dict):
+            continue
+        zone = str(param.get("zone") or "").strip()
+        base_zone = REGION_BASE_ZONES.get(zone)
+        at = param.get("at")
+        if not base_zone or not isinstance(at, list) or len(at) != 2:
+            continue
+        x = _optional_number(at[0])
+        y = _optional_number(at[1])
+        if x is None or y is None:
+            continue
+        private[str(node_name)] = {
+            "zone": zone,
+            "base_zone": base_zone,
+            "at": [round(x, 2), round(y, 2)],
+            "label": _teleport_label(node),
+        }
+
+    entries: list[dict[str, Any]] = []
+    for node_name, node in interface.items():
+        if not isinstance(node, dict) or not str(node_name).startswith("SceneEnterWorld"):
+            continue
+        anchor = node.get("anchor")
+        if not isinstance(anchor, dict):
+            continue
+        info = private.get(str(anchor.get("__ScenePrivateMapTeleportPickAnchor") or ""))
+        if info is None:
+            continue
+        entries.append({"node": str(node_name), **info})
+    entries.sort(key=lambda item: (item["base_zone"], item["label"], item["node"]))
+    return entries
+
+
 def _iter_delivery_sources(catalog: dict[str, Any]) -> list[tuple[dict[str, Any], str, str]]:
     """把仓储节点与送货终点摊平成 (来源, 名称片段, 地区) 列表。
 
@@ -232,7 +390,8 @@ def _iter_delivery_sources(catalog: dict[str, Any]) -> list[tuple[dict[str, Any]
         for depot in depots:
             if not isinstance(depot, dict) or depot.get("walk_only") is True:
                 continue
-            sources.append((depot, "仓储节点", _localized(depot.get("name"))))
+            area = _localized(depot.get("name"))
+            sources.append((depot, "仓储节点", area))
     destinations = catalog.get("destinations")
     if isinstance(destinations, list):
         for destination in destinations:
@@ -283,6 +442,7 @@ def normalize_saved_route(payload: Any) -> SavedZiplineRoute:
         goal_deck_y=goal_deck_y,
         towers=tuple(towers),
         e_hops=tuple(e_hops),
+        entry=str(payload.get("entry") or "").strip(),
     )
 
 
@@ -412,14 +572,11 @@ def _legs_of_route(path: list[Any]) -> list[tuple[float, float, float | None]]:
     required: list[tuple[float, float, float | None]] = []
     last_position: tuple[float, float, float | None] | None = None
     for item in path:
-        if not isinstance(item, dict):
+        leg = _position_of(item)
+        if leg is None:
             continue
-        target = _xy(item.get("target"))
-        if target is None:
-            continue
-        leg = (target[0], target[1], _optional_number(item.get("target_deck_y")))
         last_position = leg
-        if item.get("required") is True:
+        if isinstance(item, dict) and item.get("required") is True:
             required.append(leg)
     if not required:
         return [last_position] if last_position is not None else []
@@ -432,6 +589,49 @@ def _legs_of_route(path: list[Any]) -> list[tuple[float, float, float | None]]:
                 continue
         legs.append(leg)
     return legs
+
+
+def _ends_in_tier_coordinates(path: list[Any]) -> bool:
+    """路线的区间终点是否写在 tier 局部坐标里。
+
+    运行时会把带 ``target_tier`` 的点投影到 base 再当终点；编辑器没有投影数据，
+    这类观察点列出来也只会存成一条永远匹配不上的手工链，直接跳过。
+    """
+    last: Any = None
+    for item in path:
+        if _position_of(item) is not None:
+            last = item
+    if not isinstance(last, dict):
+        return False
+    return bool(str(last.get("target_tier") or "").strip())
+
+
+def _position_of(item: Any) -> tuple[float, float, float | None] | None:
+    """取一个路点的坐标。
+
+    对象路点读 ``target`` 与 ``target_deck_y``；裸数组 ``[x, y]`` 也是导航的普通
+    路点（默认 RUN），环境监测的手录路线经常以它结尾，不认就会漏掉终点。
+    """
+    if isinstance(item, (list, tuple)):
+        target = _xy(item[:2]) if len(item) >= 2 else None
+        if target is None:
+            return None
+        return (target[0], target[1], None)
+    if isinstance(item, dict):
+        target = _xy(item.get("target"))
+        if target is None:
+            return None
+        return (target[0], target[1], _optional_number(item.get("target_deck_y")))
+    return None
+
+
+def _teleport_label(node: dict[str, Any]) -> str:
+    """从「在地图界面找锚点 (景玉谷-生态实验站)」这类 desc 里取出地名。"""
+    desc = str(node.get("desc") or "").strip()
+    match = re.search(r"[（(]([^（）()]*)[）)]\s*$", desc)
+    if match:
+        return match.group(1).strip()
+    return desc
 
 
 def _localized(value: Any, language: str = "zh_cn") -> str:

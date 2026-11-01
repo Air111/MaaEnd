@@ -1,9 +1,11 @@
 /**
  * 按「地区-目标点」编辑手工滑索链。
  *
- * 页面只复用只读的 Ziplines.json / zipline_frames.json 与 AutoDelivery 的
- * 仓储节点、送货终点列表；保存结果是 debug/record/ZiplineRoutes.json，
- * cpp-algo 运行时在规划区间终点匹配时直接采用，不再搜索。
+ * 目标点分两类：送货（AutoDelivery 的仓储节点与终点）和环境监测观察点。
+ * 页面只复用只读的 Ziplines.json / zipline_frames.json 与生成好的路线；
+ * 保存结果是 debug/record/ZiplineRoutes.json，cpp-algo 运行时在规划区间
+ * 终点匹配时直接采用，不再搜索。环境监测另外把离第一站最近的传送锚点
+ * 写进 entry，供运行时在起飞前传送到位。
  */
 
 import {Camera} from "./camera.js";
@@ -16,6 +18,7 @@ import {
   findSavedZiplineRoute,
   formatTowerSequence,
   hopKeysOf,
+  nearestTeleport,
   parseTowerSequence,
   resolveSavedChain,
   towerTypeName,
@@ -25,11 +28,15 @@ import {latestZiplineAccountId, listZiplineAccounts, ziplineAccountLabel} from "
 
 const ACCOUNT_STORAGE = "maaend.mapnavigator.ziplineRouteAccount";
 const TARGET_STORAGE = "maaend.mapnavigator.ziplineRouteTarget";
+const KIND_STORAGE = "maaend.mapnavigator.ziplineRouteKind";
 const TOWER_HIT_RADIUS = 14;
+const KIND_ENVIRONMENT_MONITORING = "environment_monitoring";
 
 const $ = (id) => document.getElementById(id);
 const els = {
   account: $("account"),
+  kindDelivery: $("kind-delivery"),
+  kindEnvironment: $("kind-environment"),
   target: $("target"),
   targetInfo: $("target-info"),
   routeSummary: $("route-summary"),
@@ -60,9 +67,11 @@ const state = {
   records: null,
   frames: null,
   targets: [],
+  teleports: [],
   routes: [],
   accounts: [],
   accountId: "",
+  kind: "delivery",
   target: null,
   towers: [],
   chain: [],
@@ -155,6 +164,7 @@ async function boot() {
     ]);
     state.frames = frames;
     state.targets = Array.isArray(routes && routes.targets) ? routes.targets : [];
+    state.teleports = Array.isArray(routes && routes.teleports) ? routes.teleports : [];
     state.routes = Array.isArray(routes && routes.routes) ? routes.routes : [];
     state.routesPath = String((routes && routes.path) || "");
     els.routesPath.textContent = state.routesPath || "debug/record/ZiplineRoutes.json";
@@ -168,6 +178,7 @@ async function boot() {
 
   state.accounts = listZiplineAccounts(records);
   populateAccounts();
+  restoreKind();
   populateTargets();
 
   if (!records || !state.accounts.length) {
@@ -180,7 +191,7 @@ async function boot() {
     return;
   }
   if (!state.targets.length) {
-    showNotice("当前资源里没有带滑索变体的 AutoDelivery 送货点，暂时没有可编辑的目标。", "warn");
+    showNotice("当前资源里没有带滑索变体的目标点，暂时没有可编辑的对象。", "warn");
     disableEditing();
     return;
   }
@@ -195,6 +206,8 @@ async function boot() {
 
 function disableEditing() {
   els.account.disabled = true;
+  els.kindDelivery.disabled = true;
+  els.kindEnvironment.disabled = true;
   els.target.disabled = true;
   els.sequence.disabled = true;
   els.allE.disabled = true;
@@ -215,17 +228,79 @@ function populateAccounts() {
   els.account.disabled = !state.accounts.length;
 }
 
+function targetsOfKind(kind = state.kind) {
+  return state.targets.filter((target) => (target.kind || "delivery") === kind);
+}
+
+function restoreKind() {
+  const remembered = localStorage.getItem(KIND_STORAGE);
+  const hasRemembered = state.targets.some((target) => (target.kind || "delivery") === remembered);
+  state.kind = hasRemembered ? remembered : "delivery";
+  if (!targetsOfKind().length) {
+    const fallback = state.targets.find((target) => target.kind === KIND_ENVIRONMENT_MONITORING);
+    if (fallback) state.kind = KIND_ENVIRONMENT_MONITORING;
+  }
+  renderKindButtons();
+}
+
+function renderKindButtons() {
+  const buttons = [
+    [els.kindDelivery, "delivery"],
+    [els.kindEnvironment, KIND_ENVIRONMENT_MONITORING],
+  ];
+  for (const [button, kind] of buttons) {
+    button.classList.toggle("is-active", state.kind === kind);
+    button.setAttribute("aria-pressed", state.kind === kind ? "true" : "false");
+    const empty = !state.targets.some((target) => (target.kind || "delivery") === kind);
+    button.disabled = state.busy || empty;
+  }
+}
+
+function selectKind(kind, {force = false, initial = false} = {}) {
+  if (state.busy) {
+    renderKindButtons();
+    return;
+  }
+  if (!force && kind === state.kind) return;
+  if (!initial && !confirmDiscard()) {
+    renderKindButtons();
+    return;
+  }
+  state.kind = kind;
+  localStorage.setItem(KIND_STORAGE, kind);
+  state.target = null;
+  state.dirty = false;
+  state.hover = null;
+  hideTooltip();
+  setStatus("");
+  renderKindButtons();
+  populateTargets();
+  const remembered = localStorage.getItem(TARGET_STORAGE);
+  const candidates = targetsOfKind();
+  const target = candidates.find((candidate) => candidate.id === remembered) || candidates[0] || null;
+  if (target) selectTarget(target.id, {force: true});
+  else {
+    state.towers = [];
+    state.chain = [];
+    state.eHops = new Map();
+    updateTargetInfo();
+    updateChainUi();
+    renderSavedRoutes();
+  }
+}
+
 function populateTargets() {
   els.target.replaceChildren();
-  if (!state.targets.length) {
+  const candidates = targetsOfKind();
+  if (!candidates.length) {
     const option = document.createElement("option");
-    option.textContent = "（没有可编辑的送货点）";
+    option.textContent = "（这一类暂时没有可编辑的目标点）";
     els.target.append(option);
     els.target.disabled = true;
     return;
   }
   const groups = new Map();
-  for (const target of state.targets) {
+  for (const target of candidates) {
     const area = target.area || "未分区";
     if (!groups.has(area)) groups.set(area, []);
     groups.get(area).push(target);
@@ -270,7 +345,8 @@ function selectAccount(accountId, {force = false, initial = false} = {}) {
     return;
   }
   const rememberedTarget = localStorage.getItem(TARGET_STORAGE);
-  const target = state.targets.find((candidate) => candidate.id === rememberedTarget) || state.targets[0] || null;
+  const candidates = targetsOfKind();
+  const target = candidates.find((candidate) => candidate.id === rememberedTarget) || candidates[0] || null;
   if (target) selectTarget(target.id, {force: true});
 }
 
@@ -284,6 +360,13 @@ function selectTarget(targetId, {force = false} = {}) {
   if (!force && !confirmDiscard()) {
     els.target.value = state.target ? state.target.id : "";
     return;
+  }
+  const kind = target.kind || "delivery";
+  if (kind !== state.kind) {
+    state.kind = kind;
+    localStorage.setItem(KIND_STORAGE, kind);
+    renderKindButtons();
+    populateTargets();
   }
   state.target = target;
   localStorage.setItem(TARGET_STORAGE, target.id);
@@ -301,6 +384,17 @@ function selectTarget(targetId, {force = false} = {}) {
   fitView();
 }
 
+function isEnvironmentTarget(target = state.target) {
+  return Boolean(target) && (target.kind || "delivery") === KIND_ENVIRONMENT_MONITORING;
+}
+
+function teleportForChain() {
+  if (!isEnvironmentTarget() || !state.target || !state.chain.length) return null;
+  const first = towerByIndex(state.chain[0]);
+  if (!first) return null;
+  return nearestTeleport(state.teleports, first.point, state.target.zone_name);
+}
+
 function updateTargetInfo() {
   if (!state.target) {
     els.targetInfo.textContent = "选择一个目标点后显示对应地图与滑索架。";
@@ -313,7 +407,8 @@ function updateTargetInfo() {
     deckValue !== null && deckValue !== undefined && deckValue !== "" && Number.isFinite(Number(deckValue));
   const deck = hasDeck ? ` · 层高 ${Number(deckValue).toFixed(2)}` : "";
   const leg = target.leg_count > 1 ? ` · 第 ${target.leg_index}/${target.leg_count} 段` : "";
-  els.targetInfo.textContent = `${target.area || "未分区"} · ${target.destinations?.join(" / ") || target.label} · ${target.zone_name}${leg} · 终点 [${Number(goal[0]).toFixed(2)}, ${Number(goal[1]).toFixed(2)}]${deck}`;
+  const kind = isEnvironmentTarget(target) ? "环境监测 · " : "";
+  els.targetInfo.textContent = `${kind}${target.area || "未分区"} · ${target.destinations?.join(" / ") || target.label} · ${target.zone_name}${leg} · 终点 [${Number(goal[0]).toFixed(2)}, ${Number(goal[1]).toFixed(2)}]${deck}`;
 }
 
 function rebuildTowers() {
@@ -675,7 +770,11 @@ function updateRouteSummary() {
   const startText = first
     ? `#${first.index} 世界 [${first.world.map((value) => Number(value).toFixed(1)).join(", ")}]`
     : "未选择";
-  els.routeSummary.textContent = `${state.target.zone_name} · 起点 ${startText} → 终点 ${goalText}`;
+  const teleport = teleportForChain();
+  const entryText = isEnvironmentTarget()
+    ? ` · 传送 ${teleport ? teleport.label : first ? "没有同区的传送锚点" : "选好第一站后显示"}`
+    : "";
+  els.routeSummary.textContent = `${state.target.zone_name} · 起点 ${startText} → 终点 ${goalText}${entryText}`;
 }
 
 function renderChips() {
@@ -861,7 +960,14 @@ async function saveChain() {
     const eHops = state.chain
       .slice(0, -1)
       .map((from, position) => state.eHops.get(hopKey(from, state.chain[position + 1])) === true);
-    const payload = buildSavedRoutePayload(state.accountId, state.target, chainTowers, eHops);
+    const teleport = teleportForChain();
+    const payload = buildSavedRoutePayload(
+      state.accountId,
+      state.target,
+      chainTowers,
+      eHops,
+      isEnvironmentTarget() && teleport ? teleport.node : "",
+    );
     const result = await fetchJson("/api/zipline-routes", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
@@ -880,7 +986,8 @@ async function saveChain() {
     updateChainUi();
     draw();
     if (state.noticeKind === "chain") showNotice("");
-    setStatus("已保存。运行时在这个目标点的规划区间会直接采用这条路径。", "ok");
+    const entryNote = payload.entry ? `传送入口 ${teleport.label}。` : "";
+    setStatus(`已保存。${entryNote}运行时在这个目标点的规划区间会直接采用这条路径。`, "ok");
   } catch (error) {
     setStatus(`保存失败：${error && error.message ? error.message : error}`, "error");
   } finally {
@@ -949,7 +1056,7 @@ function renderSavedRoutes() {
     const leg = target && target.leg_count > 1 ? ` · 第 ${target.leg_index}/${target.leg_count} 段` : "";
     meta.textContent = `${route.zone_name} · ${Array.isArray(route.towers) ? route.towers.length : 0} 站${leg}`;
     main.append(title, meta);
-    main.title = target ? "载入这条路径" : "当前 AutoDelivery 路线里找不到对应终点，无法载入";
+    main.title = target ? "载入这条路径" : "当前目标点列表里找不到对应终点，无法载入";
     main.addEventListener("click", () => void loadSavedRoute(route, target));
     row.append(main);
 
@@ -1057,6 +1164,8 @@ async function deleteSavedRoute(route) {
 
 function bindUi() {
   els.account.addEventListener("change", () => void selectAccount(els.account.value));
+  els.kindDelivery.addEventListener("click", () => void selectKind("delivery"));
+  els.kindEnvironment.addEventListener("click", () => void selectKind(KIND_ENVIRONMENT_MONITORING));
   els.target.addEventListener("change", () => void selectTarget(els.target.value));
   els.sequence.addEventListener("change", applySequenceText);
   els.sequence.addEventListener("keydown", (event) => {

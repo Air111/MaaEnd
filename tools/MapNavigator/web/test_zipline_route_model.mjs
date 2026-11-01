@@ -9,6 +9,7 @@ import {
   findSavedZiplineRoute,
   formatTowerSequence,
   hopKeysOf,
+  nearestTeleport,
   parseTowerSequence,
   resolveSavedChain,
   validateZiplineChain,
@@ -283,6 +284,23 @@ test("builds the save payload from the clicked tower order", () => {
     ).e_hops,
     [true],
   );
+  assert.equal(
+    buildSavedRoutePayload("account-a", {label: "园区 · 甲", zone_name: "map01base", goal: [1, 2]}, [
+      towers[0],
+      towers[1],
+    ]).entry,
+    undefined,
+  );
+  assert.equal(
+    buildSavedRoutePayload(
+      "account-a",
+      {label: "古树", zone_name: "map02base", goal: [1, 2]},
+      [towers[0], towers[1]],
+      [false],
+      "SceneEnterWorldWulingJingyuValleyEcologicalResearchStation",
+    ).entry,
+    "SceneEnterWorldWulingJingyuValleyEcologicalResearchStation",
+  );
 });
 
 test("lists hop keys in chain order", () => {
@@ -298,3 +316,16 @@ test("bulk E skips the first hop and keeps the rest", () => {
   assert.deepEqual(bulkEHopKeys(null), []);
 });
 
+test("picks the nearest teleport in the same base zone", () => {
+  const teleports = [
+    {node: "A", base_zone: "map02base", at: [800, 2100], label: "景玉谷-甲"},
+    {node: "B", base_zone: "map02base", at: [972, 2197], label: "景玉谷-乙"},
+    {node: "C", base_zone: "map01base", at: [829, 2576], label: "四号谷地-丙"},
+  ];
+  assert.equal(nearestTeleport(teleports, [970, 2190], "map02base").node, "B");
+  assert.equal(nearestTeleport(teleports, [810, 2110], "map02base").node, "A");
+  assert.equal(nearestTeleport(teleports, [829, 2576], "map01base").node, "C");
+  assert.equal(nearestTeleport(teleports, [829, 2576], "map03base"), null);
+  assert.equal(nearestTeleport([], [1, 2], "map02base"), null);
+  assert.equal(nearestTeleport(teleports, null, "map02base"), null);
+});
