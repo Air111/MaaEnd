@@ -1,7 +1,7 @@
 # Developer Manual - OutpostTrading
 
 `OutpostTrading` automatically sells products at the regions/outposts selected by the user. The task follows "Pipeline owns flow, Go owns algorithms": Pipeline (`assets/resource/pipeline/OutpostTrading*.json`) handles screen recognition and clicking; the Go service (`agent/go-service/outposttrading/`) owns selection strategy, reserve rules, operator planning, and caching.  
-This document was updated on October 31, 2026.
+This document was updated on October 23, 2026.
 
 ## At a Glance
 
@@ -95,7 +95,7 @@ The minimum unit price (task option `SellProductStockMinimumUnitPrice`, default 
 - Two modes: Keep Specified Quantity / Never Sell (internally quantity `-1`); quantity `0` means keep nothing; for duplicated items the later slot wins.
 - Activity items are sold in one batch against the activity quota, so reserve rules never apply to them and the slots list no activity items; priority selling options are unaffected.
 - "Keep Specified Quantity" uses BetterSliding `ReverseTarget` to sell only the excess; reaching the reserve in one trade, or stock already at/below the reserve, both `satisfy` the item for this task so later outposts skip it during selection.
-- Selling quantity uses a ±100 tolerance (BetterSliding `QuantityTolerance: 100`): after the slider settles, a miss within 100 trades directly without ± fine-tuning clicks; a larger miss corrects only the excess. The actual kept quantity may differ from the configured reserve by up to 100.
+- Selling quantities use a ±100 tolerance (BetterSliding `QuantityTolerance: 100`): after dragging, a difference within 100 counts as done without ± fine-tuning; above 100, only the excess is added.
 - "Never Sell" excludes the item during selection recognition — no goods switching, never marked out of stock.
 
 ### Out of Stock
@@ -114,8 +114,7 @@ Pre-sell (switch to the selling operator) and post-sell (restore production assi
 4. within a tier, stable game-list order (count of matched outpost `features` desc → numeric charId desc; rarity is irrelevant).
 
 When outpost prosperity is maxed, prosperity bonuses stop counting and only trade income defines the tiers. A "perfect candidate" is the intersection of the outpost's top selling tier and its restore candidates; if the account owns any perfect candidate, planning picks only from them (even if one is occupied by another enabled outpost — no downgrade), otherwise it falls back to the top available tier. If the current operator already belongs to the best available tier, it is kept without opening the list.
-
-When **Ignore Outpost Development Value** is enabled, every outpost is treated as prosperity-maxed for tiering regardless of the recognized state: selling operators are ranked only by trade income, and an operator that also appears in the outpost's restore candidates (voucher accumulation plus voucher sale) is treated as a perfect candidate and kept. Prosperity is still recognized and cached; the option only affects operator selection.
+- With "Ignore Outpost Prosperity" enabled, every outpost is treated as prosperity-maxed and operators are tiered by trade income only; prosperity is still recognized and written back to the cache.
 
 ### Post-sell Restore Assignment
 

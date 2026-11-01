@@ -90,7 +90,7 @@
 | `AvailableQuantityFilter` | `string` 或 `object` | 否 | 可用总量 OCR 预处理使用的颜色过滤（ColorMatch）识别参数，覆盖 `BetterSlidingAvailableQuantityFilter` 节点。默认不配置。 |
 | `CenterPointOffset` | `int[2]` | 否 | 相对滑块识别框中心点的点击偏移 `[x, y]`，负数向左/上，正数向右/下。默认按控制器取值：桌面端（Win32 / macOS / Linux）为 `[-10, 0]`，移动端（ADB / CloudADB / PlayCover）为 `[-12, 0]`。 |
 | `ClampTargetToSliderMax` | `bool` | 否 | 为 `true` 时，若目标超过 `sliderMaxQuantity`，则钳制为滑条最大可选数量继续执行。默认 `false`。 |
-| `QuantityTolerance` | `int`（`>= 1`） | 否 | 数量容错。`abs(当前数量 − 目标数量) <= N` 时视为已达成，不再重校准、偏移或点 ± 按钮；偏差超过 `N` 时只补足超出部分。默认不配置，表示关闭（仍按精确目标判断）。 |
+| `QuantityTolerance` | `int`（`>= 1`） | 否 | 数量容错：与目标相差不超过 N 时直接收尾，不再微调；默认不配置，表示关闭。 |
 | `OutOfRangeOverrideEnable` | `string` | 否 | 当解析后的目标超出可滑动范围时，将指定 Pipeline 节点的 `enabled` 设为 `true` 并返回成功；未配置该字段（默认 `""`）时，本次动作直接返回失败。 |
 | `TargetReachableOverrideEnable` | `string` | 否 | 当解析后的目标无需钳制且位于 `[1, sliderMaxQuantity]` 时，将指定 Pipeline 节点的 `enabled` 设为 `true`。默认 `""`。 |
 
@@ -145,18 +145,6 @@
 
 > [!note]
 > `Percentage` 模式与 `ReverseTarget: true` 不参与短路：它们的有效目标取决于运行时读到的 `availableQuantity`，无法在进入流程前判定，因此仍走完整流程。
-
-### 数量容错
-
-配置 `QuantityTolerance` 后，判定标准从「等于 `TargetQuantity`」放宽为「落在 ±N 内」：
-
-| 复查结果 | 行为 |
-| --- | --- |
-| `abs(当前数量 − 目标数量) <= N` | 直接收尾：不重校准精确点击、不做 1px 偏移、不点 Increase/Decrease。 |
-| 偏差 > N | 继续按 `FineTuneQuantity` 决定是否微调；本轮只点「偏差 − N」次（仍受单轮上限约束），复查进入容错范围后立即收尾。 |
-
-> [!note]
-> 容错判定优先于 `FineTuneQuantity` 与 `FineTuneFallback`：读数进入容错范围时不会再走微调或不微调分支。容错只影响「停在哪里」，不改变 `TargetReachableOverrideEnable` / `OutOfRangeOverrideEnable` 的结果判定。
 
 ### 不微调语义
 
