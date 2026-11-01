@@ -3,7 +3,7 @@
         {
             "name": "EnvironmentMonitoring",
             "label": "$task.EnvironmentMonitoring.label",
-            "entry": "EnvironmentMonitoringMain",
+            "entry": "EnvironmentMonitoringCaptureUid",
             "description": "$task.EnvironmentMonitoring.description",
             "group": [
                 "regional_development"

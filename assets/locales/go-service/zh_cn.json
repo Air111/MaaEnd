@@ -245,6 +245,7 @@
     "visitfriends.growth_chamber_assist": "生长舱助力",
     "visitfriends.mfg_cabin_assist": "制造舱助力",
     "visitfriends.no_assist_enabled": "需要至少选择一个助力方式",
+    "zipline.route.using_saved": "🚡 使用保存的滑索路径前往：%s",
     "ziplineimport.android_unsupported": "Android 端暂不支持导入/更新滑索坐标",
     "ziplineimport.captured_done": "UID %s：滑索导入完成：已捕获 %d 张地图、共 %d 处滑索架",
     "ziplineimport.login_ok": "登录成功，正在导入/更新滑索",

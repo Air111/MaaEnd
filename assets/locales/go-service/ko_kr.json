@@ -244,6 +244,7 @@
     "visitfriends.growth_chamber_assist": "성장실 지원",
     "visitfriends.mfg_cabin_assist": "제조 캐빈 지원",
     "visitfriends.no_assist_enabled": "최소 하나 이상의 지원 방식을 선택해야 합니다",
+    "zipline.route.using_saved": "🚡 저장된 집라인 경로로 %s(으)로 이동합니다",
     "ziplineimport.android_unsupported": "Android에서는 아직 짚라인 좌표 가져오기를 지원하지 않습니다.",
     "ziplineimport.captured_done": "UID %s: 짚라인 가져오기 완료: %d개 맵, %d개 짚라인 랙 캡처",
     "ziplineimport.login_ok": "로그인 성공, 짚라인을 가져오는 중/갱신 중",

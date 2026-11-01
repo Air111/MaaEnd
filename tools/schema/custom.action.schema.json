@@ -98,6 +98,7 @@
                 "VisitFriendsBtwSellSlidingAction",
                 "WebEvent202605Action",
                 "ZiplineImport",
+                "ZiplineRouteGoAction",
                 "autoEcoFarmInterruptibleSleep",
                 "autoEcoFarmOverrideTargetTemplate",
                 "autoEcoFarmResetSwipeState"
@@ -605,6 +606,67 @@
                         },
                         "required": ["durationSec"],
                         "additionalProperties": false
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "type": "object",
+                "required": [
+                    "custom_action"
+                ],
+                "properties": {
+                    "custom_action": {
+                        "const": "ZiplineRouteGoAction"
+                    }
+                }
+            },
+            "then": {
+                "type": "object",
+                "required": [
+                    "custom_action_param"
+                ],
+                "properties": {
+                    "custom_action_param": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                            "zone_name",
+                            "goal",
+                            "fallback",
+                            "zip_move"
+                        ],
+                        "properties": {
+                            "zone_name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "navmesh base 区名，例如 map02base"
+                            },
+                            "goal": {
+                                "type": "array",
+                                "items": {
+                                    "type": "number"
+                                },
+                                "minItems": 2,
+                                "maxItems": 2,
+                                "description": "规划区间终点的 base 像素坐标"
+                            },
+                            "goal_deck_y": {
+                                "type": "number",
+                                "description": "可选；目标所在可走面的世界高度"
+                            },
+                            "fallback": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "没有匹配的手工链时执行的原有传送流程"
+                            },
+                            "zip_move": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "命中手工链后启用的允许滑索的移动节点"
+                            }
+                        }
                     }
                 }
             }

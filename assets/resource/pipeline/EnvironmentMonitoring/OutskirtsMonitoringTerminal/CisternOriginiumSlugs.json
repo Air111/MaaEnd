@@ -227,7 +227,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "CisternOriginiumSlugsInQuickTeleportMap"
+            "CisternOriginiumSlugsGoTargetAfterTrack"
         ]
     },
     "AlreadyTrackedCisternOriginiumSlugs": {
@@ -241,7 +241,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "CisternOriginiumSlugsOpenTrackedMissionMap"
+            "CisternOriginiumSlugsGoTargetAfterTracked"
         ]
     },
     "CisternOriginiumSlugsOpenTrackedMissionMap": {
@@ -315,7 +315,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToCisternOriginiumSlugsMove"
+            "CisternOriginiumSlugsTeleportDone"
         ]
     },
     "CisternOriginiumSlugsNotAdapted": {
@@ -326,6 +326,124 @@
         "focus": {
             "Node.Recognition.Succeeded": "$task.EnvironmentMonitoring.not_adapted"
         }
+    },
+    "CisternOriginiumSlugsGoTarget": {
+        "desc": "判断是否使用保存的滑索路径前往蓄水源石虫；没有保存路径时走原有传送流程",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                795.02,
+                2602.86
+            ],
+            "zip_move": "CisternOriginiumSlugsMoveWithZipline",
+            "fallback": "GoToCisternOriginiumSlugs"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "CisternOriginiumSlugsMoveWithZipline",
+            "GoToCisternOriginiumSlugsMove"
+        ]
+    },
+    "CisternOriginiumSlugsGoTargetAfterTrack": {
+        "desc": "刚点击追踪，判断是否使用保存的滑索路径前往蓄水源石虫",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                795.02,
+                2602.86
+            ],
+            "zip_move": "CisternOriginiumSlugsMoveWithZipline",
+            "fallback": "CisternOriginiumSlugsInQuickTeleportMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "CisternOriginiumSlugsMoveWithZipline",
+            "GoToCisternOriginiumSlugsMove"
+        ]
+    },
+    "CisternOriginiumSlugsGoTargetAfterTracked": {
+        "desc": "任务已在追踪中，判断是否使用保存的滑索路径前往蓄水源石虫",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                795.02,
+                2602.86
+            ],
+            "zip_move": "CisternOriginiumSlugsMoveWithZipline",
+            "fallback": "CisternOriginiumSlugsOpenTrackedMissionMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "CisternOriginiumSlugsMoveWithZipline",
+            "GoToCisternOriginiumSlugsMove"
+        ]
+    },
+    "CisternOriginiumSlugsMoveWithZipline": {
+        "desc": "沿保存的滑索路径前往蓄水源石虫",
+        // 只有 ZiplineRouteGoAction 命中手工链时才打开；默认禁用，保证没有保存路径时不启用滑索。
+        "enabled": false,
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "MapNavigateAction",
+        "custom_action_param": {
+            "path": [
+                {
+                    "action": "ZONE",
+                    "zone_id": "Wuling_Base"
+                },
+                {
+                    "action": "NAVMESH",
+                    "target": [
+                        788.14,
+                        2603.23
+                    ]
+                },
+                [
+                    795.02,
+                    2602.86
+                ],
+                {
+                    "action": "HEADING",
+                    "angle": 198
+                }
+            ],
+            "zip": true
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "CisternOriginiumSlugsTakePhoto"
+        ],
+        // 滑索导航失败时退回同一目标点的步行路线。
+        "on_error": [
+            "GoToCisternOriginiumSlugsMove"
+        ],
+        "focus": {
+            "Node.Action.Succeeded": {
+                "trace": true
+            },
+            "Node.Action.Failed": {
+                "trace": true
+            }
+        }
+    },
+    "CisternOriginiumSlugsTeleportDone": {
+        "desc": "传送流程结束，交回目标点决策节点继续",
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0
     },
     "GoToCisternOriginiumSlugs": {
         "desc": "前往蓄水源石虫，先回到大世界再进行判断",
@@ -361,7 +479,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToCisternOriginiumSlugsMove"
+            "CisternOriginiumSlugsTeleportDone"
         ]
     },
     "GoToCisternOriginiumSlugsNotAtStartPos": {
@@ -377,7 +495,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToCisternOriginiumSlugsMove"
+            "CisternOriginiumSlugsTeleportDone"
         ]
     },
     "GoToCisternOriginiumSlugsMove": {

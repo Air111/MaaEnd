@@ -245,6 +245,7 @@
     "visitfriends.growth_chamber_assist": "Growth Chamber Assist",
     "visitfriends.mfg_cabin_assist": "MFG Cabin Assist",
     "visitfriends.no_assist_enabled": "At least one assist method must be selected",
+    "zipline.route.using_saved": "🚡 Heading to %s via the saved zipline route",
     "ziplineimport.android_unsupported": "Zipline import is not supported on Android yet.",
     "ziplineimport.captured_done": "UID %s: Zipline import done: captured %d map(s), %d zipline rack(s)",
     "ziplineimport.login_ok": "Signed in successfully. Importing / updating ziplines…",
