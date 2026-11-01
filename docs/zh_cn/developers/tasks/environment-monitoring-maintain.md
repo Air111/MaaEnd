@@ -40,18 +40,21 @@
 环境监测在运行时按以下层次循环：
 
 ```text
-EnvironmentMonitoringMain
-  └─ EnvironmentMonitoringLoop                   （识别监测终端选择界面）
-       ├─ [JumpBack]OutskirtsMonitoringTerminal  （城郊监测终端）
-       │    └─ OutskirtsMonitoringTerminalLoop
-       │         ├─ [JumpBack]{Id}Job × N        （遍历该终端下的所有观察点）
-       │         └─ EnvironmentMonitoringTerminalFinish
-       ├─ [JumpBack]MarkerStoneMonitoringTerminal（首墩监测终端）
-       │    └─ MarkerStoneMonitoringTerminalLoop
-       │         ├─ [JumpBack]{Id}Job × N
-       │         └─ EnvironmentMonitoringTerminalFinish
-       └─ EnvironmentMonitoringFinish
+EnvironmentMonitoringCaptureUid                （CaptureUid：缓存优先地补一次账号识别）
+  └─ EnvironmentMonitoringMain
+       └─ EnvironmentMonitoringLoop                   （识别监测终端选择界面）
+            ├─ [JumpBack]OutskirtsMonitoringTerminal  （城郊监测终端）
+            │    └─ OutskirtsMonitoringTerminalLoop
+            │         ├─ [JumpBack]{Id}Job × N        （遍历该终端下的所有观察点）
+            │         └─ EnvironmentMonitoringTerminalFinish
+            ├─ [JumpBack]MarkerStoneMonitoringTerminal（首墩监测终端）
+            │    └─ MarkerStoneMonitoringTerminalLoop
+            │         ├─ [JumpBack]{Id}Job × N
+            │         └─ EnvironmentMonitoringTerminalFinish
+            └─ EnvironmentMonitoringFinish
 ```
+
+> 任务入口是 `EnvironmentMonitoringCaptureUid`，它用 `CaptureUid`（`use_cache` / `stay_on_current_screen` / `allow_unknown`）补一次账号识别再进主流程。滑索分支按账号匹配手工链，cpp-algo 的规划器也要求账号非空；识别不到账号时按「没有保存路径」处理，流程继续走原来的传送与步行。
 
 每个观察点 `{Id}Job` 内部的链路（由 `template.json` 渲染）：
 
@@ -99,6 +102,8 @@ EnvironmentMonitoringTakePhoto       （进入拍照模式 → 朝向 → 拍照
 ```
 
 每个 `{Id}Job` 仍负责识别观察点列表项，命中后通过通用 `FailureCollectorRunTask` 执行 `{Id}Execute` 路线。生成器根据环境监测数据的五语言 `mission.names` 为新任务补齐 `task.EnvironmentMonitoring.route.{Id}.failed`；已有失败提示会保留，避免覆盖人工调整。若路线内部任意节点失败，包装 Action 会记录 `{Id}Failed`、运行 `recovery_task` 返回当前监测终端，并向外返回成功以继续后续路线；全部终端遍历结束后，`EnvironmentMonitoringFinish` 通过 `FailureCollectorFinish` 按失败顺序依次调用这些提示节点，再返回总任务失败。Agent 不直接输出用户提示。
+
+滑索分支：寻路路线且终点落在 base 像素时，`Track{Id}` / `AlreadyTracked{Id}` 不再直接进入传送链，而是先进入 `{Id}GoTarget`（普通传送）或 `{Id}GoTargetAfterTrack` / `{Id}GoTargetAfterTracked`（快捷传送）。该节点调用 `ZiplineRouteGoAction` 读取 `debug/record/ZiplineRoutes.json`，按 `(账号, 区, goal)` 匹配手工链：命中且带 `entry` 时先执行 `entry`，传送到离滑索起点最近的锚点，并启用 `{Id}MoveWithZipline`；没有命中、没有 `entry` 或入口节点不可用时，关闭 `{Id}MoveWithZipline` 并执行原有传送流程。两条路径都停在 `{Id}TeleportDone`，再由 `next` 在启用状态的两个移动节点之间选择，滑索导航自身失败时退回 `GoTo{Id}Move` 步行。终点写在 `target_tier` 里的观察点不生成分支：这类坐标要等运行时才投影到 base，手工滑索路径存下的 `goal` 永远匹配不上。
 
 > [!NOTE]
 >
@@ -180,8 +185,11 @@ MysteriousCryptidGraffiti         → 谜之生物的涂鸦
 | `OcrReplace` | 由 `routes.json[*].Replace` 透传到 `Check${Id}Text.replace` 与 `In${Id}Mission.replace`；用于按任务配置任务列表和任务详情页 OCR 的易混字符替换，不影响路线是否已适配的判断 |
 | `ExpectedText` | 由 `environment_monitoring.json` 的 `mission.names` 自动展开（5 语言，英文转柔性正则） |
 | `InExpectedText` | 由 `environment_monitoring.json` 的 `mission.shot_target_names` 自动展开；其中的引号与撇号统一放宽为可缺省的任意单字符 `.?`（位于末尾的直接去掉），避免移动端 OCR 认不出引号导致拍照标题匹配失败 |
-| `TrackOrGoToNext` / `AfterTrackNext` / `AfterAlreadyTrackedNext` | 由 `data.mjs` 根据路线是否完整及 `QuickTeleport` 自动决定：默认进入 `GoTo${Id}`；快捷传送时，开始追踪后等待任务地图，已追踪则先点击定位图标打开任务地图；未适配时进入 `${Id}NotAdapted` |
-| `GoToNext` / `AfterTeleportDescription` / `AfterTeleportNext` | 由 `data.mjs` 根据传送入口和路线类型自动决定：传送后直拍始终执行真实传送，配置 `Heading` 时先进入 `GoTo${Id}Move` 调整朝向，否则直接进入 `${Id}TakePhoto`；寻路路线传送后直接进入 `GoTo${Id}Move` |
+| `TrackOrGoToNext` / `AfterTrackNext` / `AfterAlreadyTrackedNext` | 由 `data.mjs` 根据路线是否完整及 `QuickTeleport` 自动决定：默认进入 `GoTo${Id}`；快捷传送时，开始追踪后等待任务地图，已追踪则先点击定位图标打开任务地图；未适配时进入 `${Id}NotAdapted`；生成滑索分支时改为进入 `${Id}GoTarget` / `${Id}GoTargetAfterTrack` / `${Id}GoTargetAfterTracked` |
+| `GoToNext` / `AfterTeleportDescription` / `AfterTeleportNext` | 由 `data.mjs` 根据传送入口和路线类型自动决定：传送后直拍始终执行真实传送，配置 `Heading` 时先进入 `GoTo${Id}Move` 调整朝向，否则直接进入 `${Id}TakePhoto`；寻路路线传送后直接进入 `GoTo${Id}Move`；生成滑索分支时改为进入 `${Id}TeleportDone`，由 `GoTarget` 动作决定后续移动 |
+| `StartPosNext` | `GoTo${Id}StartPos` 的 next：普通寻路进入 `GoTo${Id}Move`，滑索分支进入 `${Id}TeleportDone` |
+| `ZiplineGoParam` / `ZiplineGoParamAfterTrack` / `ZiplineGoParamAfterTracked` | `ZiplineRouteGoAction` 的参数（`zone_name` / `goal` / `goal_deck_y` / `fallback` / `zip_move`）；`fallback` 分别是 `GoTo${Id}`、`${Id}InQuickTeleportMap`、`${Id}OpenTrackedMissionMap` |
+| `ZipRouteActionParam` | 与 `RouteActionParam` 相同、额外带 `zip: true`，供 `${Id}MoveWithZipline` 使用；该节点默认 `enabled: false`，只有命中手工链时由 Go 动作打开 |
 
 ### 终端分组：`terminals-config.json`
 
