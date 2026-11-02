@@ -251,6 +251,7 @@ std::vector<navmesh::WorldPoint> mount_spots(
     const std::string& locator_zone,
     const zipline::ZiplineNode& tower,
     const navmesh::WorldPoint& approach_from,
+    const navmesh::WorldPoint& leg_start,
     const std::vector<navmesh::WorldPoint>& supplies)
 {
     std::vector<navmesh::WorldPoint> spots;
@@ -262,6 +263,12 @@ std::vector<navmesh::WorldPoint> mount_spots(
             spots.push_back(spot);
         }
     };
+    // 首位是新增的"角色这一侧"塔边点: 沿起点 → 塔心方向贴到塔边, 从那侧上索不用先绕到塔背面.
+    // 后面的候选保持原样(迎接近段来路的塔边点 → 塔心 → 避让供电结构的点),
+    // 只在首位认不到上索提示时才依次使用.
+    if (const std::optional<navmesh::WorldPoint> start_side = mount_approach_point(param, locator_zone, tower, leg_start)) {
+        add_unique(*start_side);
+    }
     if (const std::optional<navmesh::WorldPoint> approach_spot = mount_approach_point(param, locator_zone, tower, approach_from)) {
         add_unique(*approach_spot);
     }
@@ -269,7 +276,8 @@ std::vector<navmesh::WorldPoint> mount_spots(
     if (const std::optional<navmesh::WorldPoint> stand = mount_stand_point(param, locator_zone, tower, supplies)) {
         add_unique(*stand);
     }
-    LogDebug << "ZiplineRoute: stand points to try at the mount tower" << VAR(spots.size()) << VAR(tower.x) << VAR(tower.y);
+    LogDebug << "ZiplineRoute: stand points to try at the mount tower" << VAR(spots.size()) << VAR(tower.x) << VAR(tower.y)
+             << VAR(leg_start.x) << VAR(leg_start.y) << VAR(approach_from.x) << VAR(approach_from.y);
     return spots;
 }
 // BaseNavRouteResult::cost 是搜索代价, 和几何长度不能混用
@@ -1087,6 +1095,7 @@ std::optional<ZiplineRoute> plan_edited_path(
         in.request.locator_zone,
         route.towers.front(),
         approach_from,
+        in.request.start,
         sites.supply_points);
     // 沿用自动选择那条日志的字段名, 日志分析工具才能照常还原这次滑索方案
     LogInfo << "ZiplineRoute: picked the edited path." << VAR(route.cost) << VAR(route.towers.size())
@@ -1233,6 +1242,7 @@ ZiplineRoute assemble_route(const PlanInputs& in, const TowerSites& sites, const
         in.request.locator_zone,
         route.towers.front(),
         approach_from,
+        in.request.start,
         sites.supply_points);
     // 全被排除时退回上索步行的终点, 那一点规划时已避开禁区
     std::erase_if(route.mount_spots, [&](const navmesh::WorldPoint& spot) { return inside_no_go(in.request, spot); });
