@@ -29,16 +29,24 @@ type savedRoute struct {
 	GoalDeckY *float64
 	// Entry 是起飞前要执行的传送入口节点；为空表示这条链没有指定入口。
 	Entry string
+	// PhotoGoal/PhotoDeckY/PhotoHeading 是可选的下索后拍照点；设置后运行时
+	// 会用它替换 zip_move 的终点和朝向，并去掉原路径里的途经点。
+	PhotoGoal    []float64
+	PhotoDeckY   *float64
+	PhotoHeading *float64
 }
 
 type routeJSON struct {
-	AccountID string            `json:"account_id"`
-	ZoneName  string            `json:"zone_name"`
-	Label     string            `json:"label"`
-	Goal      []float64         `json:"goal"`
-	GoalDeckY *float64          `json:"goal_deck_y"`
-	Entry     string            `json:"entry"`
-	Towers    []json.RawMessage `json:"towers"`
+	AccountID    string            `json:"account_id"`
+	ZoneName     string            `json:"zone_name"`
+	Label        string            `json:"label"`
+	Goal         []float64         `json:"goal"`
+	GoalDeckY    *float64          `json:"goal_deck_y"`
+	PhotoGoal    []float64         `json:"photo_goal"`
+	PhotoDeckY   *float64          `json:"photo_deck_y"`
+	PhotoHeading *float64          `json:"photo_heading"`
+	Entry        string            `json:"entry"`
+	Towers       []json.RawMessage `json:"towers"`
 }
 
 type routesDocument struct {
@@ -85,14 +93,27 @@ func parseRoutes(raw []byte) ([]savedRoute, error) {
 		if entry.GoalDeckY != nil && !isFinite(*entry.GoalDeckY) {
 			entry.GoalDeckY = nil
 		}
+		photoGoal := []float64(nil)
+		if len(entry.PhotoGoal) == 2 && isFinite(entry.PhotoGoal[0]) && isFinite(entry.PhotoGoal[1]) {
+			photoGoal = entry.PhotoGoal
+		}
+		if entry.PhotoDeckY != nil && !isFinite(*entry.PhotoDeckY) {
+			entry.PhotoDeckY = nil
+		}
+		if entry.PhotoHeading != nil && !isFinite(*entry.PhotoHeading) {
+			entry.PhotoHeading = nil
+		}
 		routes = append(routes, savedRoute{
-			AccountID: entry.AccountID,
-			ZoneName:  entry.ZoneName,
-			Label:     entry.Label,
-			GoalX:     entry.Goal[0],
-			GoalY:     entry.Goal[1],
-			GoalDeckY: entry.GoalDeckY,
-			Entry:     entry.Entry,
+			AccountID:    entry.AccountID,
+			ZoneName:     entry.ZoneName,
+			Label:        entry.Label,
+			GoalX:        entry.Goal[0],
+			GoalY:        entry.Goal[1],
+			GoalDeckY:    entry.GoalDeckY,
+			Entry:        entry.Entry,
+			PhotoGoal:    photoGoal,
+			PhotoDeckY:   entry.PhotoDeckY,
+			PhotoHeading: entry.PhotoHeading,
 		})
 	}
 	return routes, nil

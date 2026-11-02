@@ -301,6 +301,23 @@ test("builds the save payload from the clicked tower order", () => {
     ).entry,
     "SceneEnterWorldWulingJingyuValleyEcologicalResearchStation",
   );
+  const withPhoto = buildSavedRoutePayload(
+    "account-a",
+    {label: "古树", zone_name: "map02base", goal: [1, 2], goal_deck_y: 90},
+    [towers[0], towers[1]],
+    [false],
+    "",
+    [5, 6],
+    200,
+  );
+  assert.deepEqual(withPhoto.photo_goal, [5, 6]);
+  assert.equal(withPhoto.photo_deck_y, 90);
+  assert.equal(withPhoto.photo_heading, 200);
+  assert.equal(
+    buildSavedRoutePayload("account-a", {label: "古树", zone_name: "map02base", goal: [1, 2]}, [towers[0], towers[1]])
+      .photo_goal,
+    undefined,
+  );
 });
 
 test("lists hop keys in chain order", () => {

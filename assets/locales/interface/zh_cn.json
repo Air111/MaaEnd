@@ -2449,6 +2449,8 @@
     "task.DijiangRewards.focus.reception_room_flow_failed": "进入会客室任务失败，未知界面",
     "task.DijiangRewards.focus.recovery_emotion_operator_not_found": "未找到指定舱室中可用于回复心情的干员，已返回总控中枢",
     "task.DijiangRewards.label": "🎁基建任务",
+    "task.EnvironmentMonitoring.PreferZipline.description": "仅尝试使用已记录的滑索路线；没有记录或未命中时按原流程前往。",
+    "task.EnvironmentMonitoring.PreferZipline.label": "优先使用滑索",
     "task.EnvironmentMonitoring.description": "自动完成环境监测任务",
     "task.EnvironmentMonitoring.label": "🌿环境监测",
     "task.EnvironmentMonitoring.not_adapted": "当前任务尚未适配，仅接取并追踪",

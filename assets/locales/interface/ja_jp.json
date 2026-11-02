@@ -2449,6 +2449,8 @@
     "task.DijiangRewards.focus.reception_room_flow_failed": "応接室フローが未知の画面で失敗しました",
     "task.DijiangRewards.focus.recovery_emotion_operator_not_found": "気分回復の対象となる指定区画のオペレーターが見つからないため、総合制御中枢に戻りました。",
     "task.DijiangRewards.label": "🎁基地報酬",
+    "task.EnvironmentMonitoring.PreferZipline.description": "記録済みのジップライン経路のみを試します。記録がない、または一致しない場合は元の経路で移動します。",
+    "task.EnvironmentMonitoring.PreferZipline.label": "ジップラインを優先",
     "task.EnvironmentMonitoring.description": "環境監視タスクを自動で完了します",
     "task.EnvironmentMonitoring.label": "🌿環境監視",
     "task.EnvironmentMonitoring.not_adapted": "このタスクはまだ対応していません。受注・追跡のみ行います。",

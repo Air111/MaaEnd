@@ -103,6 +103,13 @@ AccountOverride read_account_override(MaaContext* context)
 
 bool ResolveZiplineEnabled(MaaContext* context, bool requested)
 {
+    // 任务级 No 只关保存路线; 这里把它当作本任务整体关滑索, 不碰全局设置.
+    const auto saved = ReadNodeObject(context, "SavedZiplineRoutePreference", "ZiplineSavedRoute");
+    if (saved && saved->contains("attach") && saved->at("attach").is_object()
+        && !saved->at("attach").as_object().get("prefer_saved", true)) {
+        LogInfo << "ZiplinePreference: saved-route preference is off; zipline disabled for this task.";
+        return false;
+    }
     return read_preference(context, requested);
 }
 

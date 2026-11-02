@@ -422,6 +422,30 @@ class SavedRouteTest(unittest.TestCase):
         self.assertEqual(route.entry, "")
         self.assertNotIn("entry", route.as_dict())
 
+    def test_keeps_photo_target_and_normalizes_heading(self) -> None:
+        payload = _saved(goal=(1.0, 2.0), tower_x=1.0).as_dict()
+        payload["photo_goal"] = [880.5, 1928.5]
+        payload["photo_deck_y"] = 4.0
+        payload["photo_heading"] = -20
+        route = normalize_saved_route(payload)
+        self.assertEqual(route.photo_goal, (880.5, 1928.5))
+        self.assertEqual(route.photo_deck_y, 4.0)
+        self.assertEqual(route.photo_heading, 340.0)
+        saved = route.as_dict()
+        self.assertEqual(saved["photo_goal"], [880.5, 1928.5])
+        self.assertEqual(saved["photo_heading"], 340.0)
+
+        payload.pop("photo_goal")
+        route = normalize_saved_route(payload)
+        self.assertIsNone(route.photo_goal)
+        self.assertNotIn("photo_goal", route.as_dict())
+
+    def test_rejects_invalid_photo_goal(self) -> None:
+        payload = _saved(goal=(1.0, 2.0), tower_x=1.0).as_dict()
+        payload["photo_goal"] = [1.0]
+        with self.assertRaises(ValueError):
+            normalize_saved_route(payload)
+
 
 def _saved(*, goal: tuple[float, float], tower_x: float) -> SavedZiplineRoute:
     return SavedZiplineRoute(

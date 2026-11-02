@@ -1371,11 +1371,16 @@ std::optional<ZiplineRoute> PlanZiplineRoute(ZiplineOutcome* outcome, const Navi
     const double baseline_length = walking_baseline_available ? polyline_length(*request.walking_path) : 0.0;
     const double gain_threshold = walking_baseline_available ? baseline_length - cost.min_gain : std::numeric_limits<double>::infinity();
     // 手工路径按 (区, 终点) 命中; 起点由本次实际位置决定, 不参与匹配
+    // path 的终点可以因为自定义拍照点而改变, 匹配仍回到原观察点保存的那条链.
+    const double match_goal_x = param.zipline_match_goal ? (*param.zipline_match_goal)[0] : request.goal.x;
+    const double match_goal_y = param.zipline_match_goal ? (*param.zipline_match_goal)[1] : request.goal.y;
+    const std::optional<double> match_deck_y = param.zipline_match_deck_y ? param.zipline_match_deck_y : request.goal_deck_y;
     const zipline::ZiplineSavedRoute* saved_route =
-        data->routes.find(param.zipline_account_id, request.navmesh_zone, request.goal.x, request.goal.y, request.goal_deck_y);
+        data->routes.find(param.zipline_account_id, request.navmesh_zone, match_goal_x, match_goal_y, match_deck_y);
     if (saved_route != nullptr) {
         LogInfo << "ZiplineRoute: an edited path matches this leg." << VAR(request.navmesh_zone) << VAR(request.goal.x)
-                << VAR(request.goal.y) << VAR(saved_route->label) << VAR(saved_route->towers.size());
+                << VAR(request.goal.y) << VAR(match_goal_x) << VAR(match_goal_y) << VAR(saved_route->label)
+                << VAR(saved_route->towers.size());
     }
 
     // 手工路径是用户的明确选择, 不再按步行成本否决, 只在走不通时回退
