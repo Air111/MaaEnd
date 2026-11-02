@@ -74,6 +74,7 @@ _ROUTES_README = [
     "goal 是 navmesh base 像素坐标；towers 是世界坐标，重新导入滑索记录后仍按世界坐标认架子。",
     "e_hops 与 towers 逐跳对应，true 表示这一跳的起点塔设置了自动终点；实际按 E 在上一段，第一条跳没有上一段，运行时忽略。",
     "entry 可选，是环境监测等任务在起飞前要执行的传送入口节点；旧文件没有该字段时按任务原有传送流程走。",
+    "photo_goal / photo_deck_y / photo_heading 可选，是滑索下索后的自定义拍照点和朝向；原 goal 仍用于匹配，运行时只替换滑索分支的终点/朝向并去掉原途经点。",
     "手工链里的架子未通电、已删除、某跳走不通或本轮已失败过时，运行时会退回自动查找。",
 ]
 
@@ -94,6 +95,8 @@ class ZiplineTarget:
     goal_deck_y: float | None
     leg_index: int
     leg_count: int
+    # 原路线写死的拍照朝向; 自定义拍照点时可用来显示/作为自动朝向的兜底.
+    heading: float | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -109,6 +112,7 @@ class ZiplineTarget:
             "goal_deck_y": self.goal_deck_y,
             "leg_index": self.leg_index,
             "leg_count": self.leg_count,
+            "heading": self.heading,
         }
 
 
@@ -148,6 +152,11 @@ class SavedZiplineRoute:
     # 可选: 起飞前要执行的传送入口节点. 环境监测用它去离滑索起点最近的锚点;
     # 送货任务沿用 AutoDelivery 自己的快捷传送, 一般留空.
     entry: str = ""
+    # 可选: 下索后的自定义拍照点. 设置后运行时替换 zip_move 的终点/朝向并去掉途经点;
+    # 原 goal 仍是匹配键.
+    photo_goal: tuple[float, float] | None = None
+    photo_deck_y: float | None = None
+    photo_heading: float | None = None
 
     def as_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -161,6 +170,12 @@ class SavedZiplineRoute:
         }
         if self.entry:
             payload["entry"] = self.entry
+        if self.photo_goal is not None:
+            payload["photo_goal"] = list(self.photo_goal)
+            if self.photo_deck_y is not None:
+                payload["photo_deck_y"] = self.photo_deck_y
+            if self.photo_heading is not None:
+                payload["photo_heading"] = self.photo_heading
         return payload
 
 
@@ -291,6 +306,7 @@ def build_environment_monitoring_targets(
         if _ends_in_tier_coordinates(path):
             continue
         legs = _legs_of_route(path)
+        heading = _optional_number(entry.get("Heading"))
         for leg_index, (goal_x, goal_y, goal_deck_y) in enumerate(legs, start=1):
             targets.append(
                 ZiplineTarget(
@@ -306,6 +322,7 @@ def build_environment_monitoring_targets(
                     goal_deck_y=goal_deck_y,
                     leg_index=leg_index,
                     leg_count=len(legs),
+                    heading=heading if leg_index == len(legs) else None,
                 )
             )
     targets.sort(key=lambda target: (target.area, target.label, target.leg_index, target.goal))
@@ -434,6 +451,16 @@ def normalize_saved_route(payload: Any) -> SavedZiplineRoute:
     if isinstance(raw_e_hops, list):
         e_hops = [value is True for value in raw_e_hops[: len(towers) - 1]]
     e_hops.extend([False] * (len(towers) - 1 - len(e_hops)))
+    photo_goal: tuple[float, float] | None = None
+    raw_photo_goal = payload.get("photo_goal")
+    if raw_photo_goal is not None:
+        xy = _xy(raw_photo_goal)
+        if xy is None:
+            raise ValueError("photo_goal 必须是 [x, y]")
+        photo_goal = (round(xy[0], 3), round(xy[1], 3))
+    photo_heading = _optional_number(payload.get("photo_heading"))
+    if photo_heading is not None:
+        photo_heading %= 360.0
     return SavedZiplineRoute(
         account_id=account_id,
         zone_name=zone_name,
@@ -443,6 +470,9 @@ def normalize_saved_route(payload: Any) -> SavedZiplineRoute:
         towers=tuple(towers),
         e_hops=tuple(e_hops),
         entry=str(payload.get("entry") or "").strip(),
+        photo_goal=photo_goal,
+        photo_deck_y=_optional_number(payload.get("photo_deck_y")),
+        photo_heading=photo_heading,
     )
 
 

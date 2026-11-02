@@ -18,6 +18,8 @@ const (
 	identityNode = "CurrentAccountIdentity"
 	// accountOverrideNode 是设置项「强制使用第一份滑索数据」的载体，优先于当前账号。
 	accountOverrideNode = "MapNavigatorZiplineAccount"
+	// preferenceNode 是「优先使用滑索」开关的载体，只承载设置项写入的值。
+	preferenceNode = "SavedZiplineRoutePreference"
 	// focusKey 是起飞时给用户看的提示。
 	focusKey = "zipline.route.using_saved"
 )
@@ -61,6 +63,13 @@ func (a *RouteGoAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 		return false
 	}
 
+	// 开关只控制「是否尝试已记录的滑索路线」，关掉时仍走原来的传送与步行流程。
+	if !preferSavedRoute(ctx) {
+		setZipMoveEnabled(ctx, params.ZipMove, false)
+		log.Info().Str("component", actionName).Msg("saved zipline routes are disabled by preference; falling back")
+		return runNode(ctx, params.Fallback)
+	}
+
 	route := lookupRoute(ctx, params)
 	if route != nil && route.Entry != "" {
 		// 节点不存在或被禁用时和「没有保存路径」一样回退；只有真正跑失败才让本节点失败。
@@ -70,7 +79,9 @@ func (a *RouteGoAction) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 				Str("entry", route.Entry).
 				Msg("saved zipline route entry is missing or disabled; falling back")
 		} else if runNode(ctx, route.Entry) {
-			setZipMoveEnabled(ctx, params.ZipMove, true)
+			if !applyPhotoTarget(ctx, params, route) {
+				setZipMoveEnabled(ctx, params.ZipMove, true)
+			}
 			maafocus.Print(ctx, i18n.T(focusKey, displayRouteName(route, params.ZoneName)))
 			log.Info().
 				Str("component", actionName).
@@ -116,6 +127,29 @@ func (p goActionParam) validate() error {
 		return fmt.Errorf("zip_move is empty")
 	}
 	return nil
+}
+
+// preferSavedRoute 读取「优先使用滑索」开关；节点缺失或值不可读时按默认开启处理，
+// 保持没有设置项的旧资源仍会尝试已记录的滑索路线。
+func preferSavedRoute(ctx *maa.Context) bool {
+	raw, err := ctx.GetNodeJSON(preferenceNode)
+	if err != nil || strings.TrimSpace(raw) == "" {
+		return true
+	}
+	var node struct {
+		Attach struct {
+			PreferSaved *bool `json:"prefer_saved"`
+		} `json:"attach"`
+	}
+	if err := json.Unmarshal([]byte(raw), &node); err != nil || node.Attach.PreferSaved == nil {
+		log.Warn().
+			Err(err).
+			Str("component", actionName).
+			Str("node", preferenceNode).
+			Msg("failed to read saved zipline preference; keeping it enabled")
+		return true
+	}
+	return *node.Attach.PreferSaved
 }
 
 // lookupRoute 读取手工链并按 (账号, 区, 终点, 层高) 匹配；任何读取或解析问题都只回退，不中断任务。

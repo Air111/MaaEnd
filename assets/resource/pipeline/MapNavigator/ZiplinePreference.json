@@ -4,5 +4,11 @@
         "attach": {
             "zipline": "auto"
         }
+    },
+    "SavedZiplineRoutePreference": {
+        "desc": "是否优先尝试已记录的滑索路线。只承载设置项写入的值,寻路前读一次,不会被执行",
+        "attach": {
+            "prefer_saved": true
+        }
     }
 }
