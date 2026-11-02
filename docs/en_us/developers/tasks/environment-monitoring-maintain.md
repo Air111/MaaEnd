@@ -53,7 +53,7 @@ EnvironmentMonitoringMain
        └─ EnvironmentMonitoringFinish
 ```
 
-The task entry is `EnvironmentMonitoringCaptureUid`: it captures the account once before `EnvironmentMonitoringMain`. When a navigation route ends on a base-pixel goal, the generator emits a zipline branch that prefers the saved chain's teleport entry and zipline navigation, falling back to the original teleport/walk flow otherwise.
+The task entry is `EnvironmentMonitoringCaptureUid`: it captures the account once before `EnvironmentMonitoringMain`. When a navigation route ends on a base-pixel goal, the generator emits a zipline branch that prefers the saved chain's teleport entry and zipline navigation, falling back to the original teleport/walk flow otherwise. The `Prefer ziplines` task option (`SavedZiplineRoutePreference.attach.prefer_saved`) controls whether that branch is attempted: when off, the task does not read saved zipline routes and keeps the original teleport/walk flow. If a saved chain carries a custom photo point (`photo_goal` / `photo_heading` in `ZiplineRoutes.json`), `ZiplineRouteGoAction` rewrites the branch's `zip_move` to "keep ZONE, drop the authored via points, end at `photo_goal` with `photo_heading`" and passes `zipline_match_goal` so the chain still matches the original observation point's goal; the walking branch is unchanged.
 
 The internal chain for each observation point `{Id}Job` (rendered by `template.json`):
 

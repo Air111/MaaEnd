@@ -37,6 +37,21 @@
             <select id="target" class="combo"></select>
           </label>
           <div id="target-info" class="target-info">选择一个目标点后显示对应地图与滑索架。</div>
+          <label class="field" id="photo-heading-field" hidden>
+            <span>拍照朝向（留空自动朝向原拍照点）</span>
+            <input
+              id="photo-heading"
+              class="entry"
+              type="number"
+              step="1"
+              min="0"
+              max="359"
+              inputmode="numeric"
+              placeholder="自动" />
+          </label>
+          <div id="photo-hint" class="hint" hidden>
+            环境监测：选好至少两站或载入已保存路径后，拖动图上的红色标记设置下索后的拍照点；「归位」恢复原目标点。保存后只有滑索分支使用它，步行流程不变。
+          </div>
           <div id="route-summary" class="target-info">起点：选择第一根滑索架后显示；终点：选择目标点后显示。</div>
         </section>
 
@@ -68,9 +83,10 @@
           </div>
           <div class="actions">
             <button id="all-e" class="btn" type="button" title="把路径里所有跳都勾上 E">全设E</button>
-            <button id="clear" class="btn" type="button">清空</button>
+            <button id="clear" class="btn" type="button" title="清空当前路径并把拍照点归位">清空</button>
             <button id="save" class="btn primary" type="button">保存</button>
             <button id="delete" class="btn danger" type="button" title="删除这个目标点已保存的手工路径">删除</button>
+            <button id="photo-reset" class="btn" type="button" hidden title="把拍照点恢复到原目标点">归位</button>
           </div>
           <div id="validation" class="validation"></div>
         </section>

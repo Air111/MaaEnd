@@ -53,7 +53,7 @@ EnvironmentMonitoringMain
        └─ EnvironmentMonitoringFinish
 ```
 
-任务入口是 `EnvironmentMonitoringCaptureUid`，先补一次账号识别再进入 `EnvironmentMonitoringMain`；寻路路线终点落在 base 像素时，生成器会生成滑索分支，命中手工滑索链时优先用链上的传送入口与滑索导航，否则回退原来的传送/步行流程。
+任务入口是 `EnvironmentMonitoringCaptureUid`，先补一次账号识别再进入 `EnvironmentMonitoringMain`；寻路路线终点落在 base 像素时，生成器会生成滑索分支，命中手工滑索链时优先用链上的传送入口与滑索导航，否则回退原来的传送/步行流程。任务选项「优先使用滑索」（`SavedZiplineRoutePreference.attach.prefer_saved`）控制是否尝试这条分支：关闭时不会读取已记录的滑索路线，直接走原有传送/步行。若手工链保存了自定义拍照点（`ZiplineRoutes.json` 的 `photo_goal` / `photo_heading`），`ZiplineRouteGoAction` 会把滑索分支的 `zip_move` 改成「保留 ZONE、去掉原途经点、以 `photo_goal` 为 NAVMESH 终点、以 `photo_heading` 为 HEADING」，并通过 `zipline_match_goal` 仍按原观察点的 goal 命中同一条链；步行分支不变。
 
 每个观察点 `{Id}Job` 内部的链路（由 `template.json` 渲染）：
 

@@ -410,6 +410,17 @@
                                     "camera"
                                 ],
                                 "default": "character"
+                            },
+                            "zipline_match_goal": {
+                                "type": "array",
+                                "items": { "type": "number" },
+                                "minItems": 2,
+                                "maxItems": 2,
+                                "description": "手工滑索链的匹配终点；缺省用 path 的终点"
+                            },
+                            "zipline_match_deck_y": {
+                                "type": "number",
+                                "description": "手工滑索链的匹配层高；缺省用 path 终点的层高"
                             }
                         }
                     }

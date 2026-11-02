@@ -39,6 +39,10 @@ const els = {
   kindEnvironment: $("kind-environment"),
   target: $("target"),
   targetInfo: $("target-info"),
+  photoHeading: $("photo-heading"),
+  photoHeadingField: $("photo-heading-field"),
+  photoHint: $("photo-hint"),
+  photoReset: $("photo-reset"),
   routeSummary: $("route-summary"),
   sequence: $("sequence"),
   chips: $("chips"),
@@ -77,6 +81,10 @@ const state = {
   chain: [],
   eHops: new Map(),
   savedRoute: null,
+  // 环境监测的自定义拍照点；null 表示沿用 target.goal。
+  photoGoal: null,
+  photoHeading: null,
+  dragGoal: false,
   dirty: false,
   hover: null,
   zone: "",
@@ -369,6 +377,8 @@ function selectTarget(targetId, {force = false} = {}) {
     populateTargets();
   }
   state.target = target;
+  state.photoGoal = null;
+  state.photoHeading = null;
   localStorage.setItem(TARGET_STORAGE, target.id);
   state.dirty = false;
   state.hover = null;
@@ -395,6 +405,79 @@ function teleportForChain() {
   return nearestTeleport(state.teleports, first.point, state.target.zone_name);
 }
 
+function finiteNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function photoGoalPoint() {
+  const target = state.target;
+  if (!target) return null;
+  const raw = Array.isArray(state.photoGoal) ? state.photoGoal : target.goal;
+  if (!Array.isArray(raw) || raw.length !== 2) return null;
+  const point = raw.map(Number);
+  return point.every(Number.isFinite) ? point : null;
+}
+
+function autoPhotoHeading() {
+  const target = state.target;
+  const point = photoGoalPoint();
+  if (!target || !point || !Array.isArray(target.goal)) return null;
+  const dx = Number(target.goal[0]) - point[0];
+  const dy = Number(target.goal[1]) - point[1];
+  if (!Number.isFinite(dx) || !Number.isFinite(dy) || (dx === 0 && dy === 0)) {
+    return finiteNumber(target.heading);
+  }
+  const angle = (Math.atan2(dx, -dy) * 180) / Math.PI;
+  return Math.round((((angle % 360) + 360) % 360) * 10) / 10;
+}
+
+function desiredPhotoHeading() {
+  const raw = els.photoHeading.value.trim();
+  if (!raw) return autoPhotoHeading();
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return autoPhotoHeading();
+  return ((value % 360) + 360) % 360;
+}
+
+function syncPhotoUi() {
+  const active = photoTargetActive();
+  els.photoHeadingField.hidden = !active;
+  els.photoHint.hidden = !active;
+  els.photoReset.hidden = !active;
+  if (!active) {
+    state.photoGoal = null;
+    state.photoHeading = null;
+    els.photoHeading.value = "";
+    updateTargetInfo();
+    return;
+  }
+  if (state.photoHeading === null || state.photoHeading === undefined) {
+    els.photoHeading.value = "";
+  } else {
+    els.photoHeading.value = String(Number(state.photoHeading).toFixed(1)).replace(/\.0$/, "");
+  }
+  updateTargetInfo();
+}
+
+function photoTargetActive() {
+  return isEnvironmentTarget() && (state.savedRoute !== null || state.chain.length >= 2);
+}
+
+function resetPhotoTarget(notify = true) {
+  state.photoGoal = null;
+  state.photoHeading = null;
+  els.photoHeading.value = "";
+  els.photoReset.disabled = true;
+  if (notify) {
+    markDirty();
+    setStatus("拍照点已归位；保存路径后生效。", "info");
+  }
+  updateTargetInfo();
+  draw();
+}
+
 function updateTargetInfo() {
   if (!state.target) {
     els.targetInfo.textContent = "选择一个目标点后显示对应地图与滑索架。";
@@ -408,7 +491,17 @@ function updateTargetInfo() {
   const deck = hasDeck ? ` · 层高 ${Number(deckValue).toFixed(2)}` : "";
   const leg = target.leg_count > 1 ? ` · 第 ${target.leg_index}/${target.leg_count} 段` : "";
   const kind = isEnvironmentTarget(target) ? "环境监测 · " : "";
-  els.targetInfo.textContent = `${kind}${target.area || "未分区"} · ${target.destinations?.join(" / ") || target.label} · ${target.zone_name}${leg} · 终点 [${Number(goal[0]).toFixed(2)}, ${Number(goal[1]).toFixed(2)}]${deck}`;
+  let photo = "";
+  if (isEnvironmentTarget(target)) {
+    const point = photoGoalPoint();
+    const moved = point && Math.hypot(point[0] - Number(goal[0]), point[1] - Number(goal[1])) > 0.5;
+    const heading = desiredPhotoHeading();
+    if (moved || (heading !== null && heading !== finiteNumber(target.heading))) {
+      const shown = point || [Number(goal[0]), Number(goal[1])];
+      photo = ` · 拍照点 [${shown[0].toFixed(2)}, ${shown[1].toFixed(2)}] · 朝向 ${heading === null ? "默认" : `${heading.toFixed(1)}°`}`;
+    }
+  }
+  els.targetInfo.textContent = `${kind}${target.area || "未分区"} · ${target.destinations?.join(" / ") || target.label} · ${target.zone_name}${leg} · 终点 [${Number(goal[0]).toFixed(2)}, ${Number(goal[1]).toFixed(2)}]${deck}${photo}`;
 }
 
 function rebuildTowers() {
@@ -430,6 +523,14 @@ function loadSavedChain() {
         state.target.goal_deck_y,
       )
     : null;
+  state.photoGoal = null;
+  state.photoHeading = null;
+  if (state.savedRoute && Array.isArray(state.savedRoute.photo_goal) && state.savedRoute.photo_goal.length === 2) {
+    const point = state.savedRoute.photo_goal.map(Number);
+    if (point.every(Number.isFinite)) state.photoGoal = point;
+  }
+  if (state.savedRoute) state.photoHeading = finiteNumber(state.savedRoute.photo_heading);
+  syncPhotoUi();
   state.chain = [];
   state.eHops = new Map();
   if (!state.savedRoute) return;
@@ -538,6 +639,8 @@ function fitView() {
   }
 
   if (goal) points.push(goal);
+  const photo = photoGoalPoint();
+  if (photo) points.push(photo);
   if (points.length) {
     let minX = Infinity;
     let minY = Infinity;
@@ -577,9 +680,31 @@ function draw() {
 function drawGoal() {
   if (!state.target) return;
   if (!Array.isArray(state.target.goal) || state.target.goal.length !== 2) return;
-  const [x, y] = state.target.goal.map(Number);
+  const point = photoGoalPoint();
+  if (!point) return;
+  const [x, y] = point;
   const [cx, cy] = camera.worldToCanvas(x, y);
   if (!Number.isFinite(cx) || !Number.isFinite(cy)) return;
+  const moved = Math.hypot(x - Number(state.target.goal[0]), y - Number(state.target.goal[1])) > 0.5;
+  if (moved) {
+    const [ox, oy] = camera.worldToCanvas(Number(state.target.goal[0]), Number(state.target.goal[1]));
+    if (Number.isFinite(ox) && Number.isFinite(oy)) {
+      ctx.save();
+      ctx.setLineDash([5, 5]);
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.7)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(ox, oy);
+      ctx.lineTo(cx, cy);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(ox, oy, 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      drawLabel(ox, oy - 18, "原目标点", "#94a3b8");
+    }
+  }
   ctx.save();
   ctx.strokeStyle = "#f43f5e";
   ctx.fillStyle = "rgba(244, 63, 94, 0.18)";
@@ -593,7 +718,7 @@ function drawGoal() {
   ctx.fillStyle = "#f43f5e";
   ctx.fill();
   ctx.restore();
-  drawLabel(cx, cy - 24, "目标点", "#f43f5e");
+  drawLabel(cx, cy - 24, isEnvironmentTarget() ? state.target.label || "目标点" : "目标点", "#f43f5e");
 }
 
 function drawChain() {
@@ -750,7 +875,9 @@ function updateChainUi() {
   els.clear.disabled = !state.chain.length;
   els.save.disabled = !state.target || !state.accountId || !validation.ok || state.busy;
   els.delete.disabled = !state.savedRoute || state.busy;
+  els.photoReset.disabled = state.busy || (state.photoGoal === null && state.photoHeading === null);
   updateRouteSummary();
+  syncPhotoUi();
 }
 
 function allHopsMarked() {
@@ -896,6 +1023,14 @@ function applySequenceText() {
   draw();
 }
 
+function hitPhotoGoal(canvasX, canvasY) {
+  if (!photoTargetActive()) return false;
+  const point = photoGoalPoint();
+  if (!point) return false;
+  const [cx, cy] = camera.worldToCanvas(point[0], point[1]);
+  return Math.hypot(cx - canvasX, cy - canvasY) <= 14;
+}
+
 function clickTower(tower) {
   if (state.busy) return;
   if (!tower.powered) {
@@ -961,12 +1096,26 @@ async function saveChain() {
       .slice(0, -1)
       .map((from, position) => state.eHops.get(hopKey(from, state.chain[position + 1])) === true);
     const teleport = teleportForChain();
+    const environment = isEnvironmentTarget();
+    const moved =
+      environment &&
+      Array.isArray(state.photoGoal) &&
+      Math.hypot(
+        Number(state.photoGoal[0]) - Number(state.target.goal[0]),
+        Number(state.photoGoal[1]) - Number(state.target.goal[1]),
+      ) > 0.5;
+    const headingText = els.photoHeading.value.trim();
+    const customPhoto = environment && (moved || headingText !== "");
+    const photoGoal = customPhoto ? photoGoalPoint() : null;
+    const photoHeading = customPhoto ? desiredPhotoHeading() : null;
     const payload = buildSavedRoutePayload(
       state.accountId,
       state.target,
       chainTowers,
       eHops,
-      isEnvironmentTarget() && teleport ? teleport.node : "",
+      environment && teleport ? teleport.node : "",
+      photoGoal,
+      photoHeading,
     );
     const result = await fetchJson("/api/zipline-routes", {
       method: "POST",
@@ -981,6 +1130,9 @@ async function saveChain() {
       state.target.goal,
       state.target.goal_deck_y,
     );
+    state.photoGoal = Array.isArray(payload.photo_goal) ? payload.photo_goal.slice() : null;
+    state.photoHeading = finiteNumber(payload.photo_heading);
+    syncPhotoUi();
     state.dirty = false;
     renderSavedRoutes();
     updateChainUi();
@@ -1012,8 +1164,11 @@ async function deleteChain() {
     const result = await fetchJson(`/api/zipline-routes?${params}`, {method: "DELETE"});
     state.routes = Array.isArray(result && result.routes) ? result.routes : state.routes;
     state.savedRoute = null;
+    state.photoGoal = null;
+    state.photoHeading = null;
     state.chain = [];
     state.dirty = false;
+    syncPhotoUi();
     renderSavedRoutes();
     updateChainUi();
     draw();
@@ -1141,10 +1296,13 @@ async function deleteSavedRoute(route) {
       );
       if (!current) {
         state.savedRoute = null;
+        state.photoGoal = null;
+        state.photoHeading = null;
         if (!state.dirty) {
           state.chain = [];
           state.eHops.clear();
         }
+        syncPhotoUi();
       } else {
         state.savedRoute = current;
       }
@@ -1187,13 +1345,26 @@ function bindUi() {
   });
   els.clear.addEventListener("click", () => {
     if (state.busy) return;
+    resetPhotoTarget(false);
     state.chain = [];
     state.eHops.clear();
     markDirty();
     updateChainUi();
     draw();
+    setStatus("路径已清空，拍照点已归位；保存新路径或删除原路径后才会写入。", "info");
   });
   els.save.addEventListener("click", () => void saveChain());
+  els.photoHeading.addEventListener("input", () => {
+    if (!isEnvironmentTarget()) return;
+    state.photoHeading = finiteNumber(els.photoHeading.value.trim());
+    els.photoReset.disabled = state.photoHeading === null && state.photoGoal === null;
+    markDirty();
+    updateTargetInfo();
+  });
+  els.photoReset.addEventListener("click", () => {
+    if (state.busy || !isEnvironmentTarget()) return;
+    resetPhotoTarget(true);
+  });
   els.delete.addEventListener("click", () => void deleteChain());
   els.zoomIn.addEventListener("click", () => {
     camera.zoomAt(canvasWidth / 2, canvasHeight / 2, 1.25);
@@ -1223,12 +1394,26 @@ function bindUi() {
     if (event.button !== 0) return;
     event.preventDefault();
     const [x, y] = canvasPoint(event, els.overlay);
+    if (hitPhotoGoal(x, y)) {
+      state.dragGoal = true;
+      els.overlay.setPointerCapture(event.pointerId);
+      return;
+    }
     pan.arm(x, y);
     els.overlay.setPointerCapture(event.pointerId);
   });
 
   els.overlay.addEventListener("pointermove", (event) => {
     const [x, y] = canvasPoint(event, els.overlay);
+    if (state.dragGoal) {
+      const [wx, wy] = camera.canvasToWorld(x, y);
+      state.photoGoal = [Math.round(wx * 100) / 100, Math.round(wy * 100) / 100];
+      els.photoReset.disabled = false;
+      markDirty();
+      updateTargetInfo();
+      draw();
+      return;
+    }
     if (pan.armed || pan.active) {
       pan.move(x, y);
       if (pan.active) {
@@ -1247,6 +1432,13 @@ function bindUi() {
 
   els.overlay.addEventListener("pointerup", (event) => {
     const [x, y] = canvasPoint(event, els.overlay);
+    if (state.dragGoal) {
+      state.dragGoal = false;
+      els.overlay.style.cursor = "";
+      updateTargetInfo();
+      draw();
+      return;
+    }
     const wasDragging = pan.active;
     pan.cancel();
     els.overlay.style.cursor = "";
@@ -1264,6 +1456,7 @@ function bindUi() {
   });
 
   els.overlay.addEventListener("pointercancel", () => {
+    state.dragGoal = false;
     pan.cancel();
     els.overlay.style.cursor = "";
     hideTooltip();

@@ -2449,6 +2449,8 @@
     "task.DijiangRewards.focus.reception_room_flow_failed": "Reception Room flow failed, unknown screen",
     "task.DijiangRewards.focus.recovery_emotion_operator_not_found": "No operator from the selected cabins was found for mood recovery; returned to Control Nexus.",
     "task.DijiangRewards.label": "🎁Base Rewards",
+    "task.EnvironmentMonitoring.PreferZipline.description": "Only tries recorded zipline routes; falls back to the original route when none is recorded or matched.",
+    "task.EnvironmentMonitoring.PreferZipline.label": "Prefer ziplines",
     "task.EnvironmentMonitoring.description": "Automatically complete environment monitoring tasks",
     "task.EnvironmentMonitoring.label": "🌿Environment Monitoring",
     "task.EnvironmentMonitoring.not_adapted": "This task is not yet supported; it will only accept and track the mission.",
