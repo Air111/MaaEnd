@@ -11,7 +11,7 @@
 
 #include <MaaUtils/Logger.h>
 
-#include "../Common/output_paths.h"
+#include "../Common/paths.h"
 
 namespace zipline
 {
@@ -98,7 +98,7 @@ void parse_e_hops(const json::object& obj, size_t hop_count, std::vector<bool>& 
 
 std::filesystem::path ZiplineRoutes::DefaultPath()
 {
-    return common::OutputPath("debug/record") / kRoutesFileName;
+    return common::UserDataPath("debug/record") / kRoutesFileName;
 }
 
 bool ZiplineRoutes::load(const std::filesystem::path& path)

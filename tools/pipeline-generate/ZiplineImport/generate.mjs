@@ -120,33 +120,58 @@ function buildRegions() {
 
 function buildTask(regions) {
     const options = {
-        ZiplineImportClearLogin: {
+        ZiplineImportAnotherAccount: {
             type: "switch",
             controller: [
                 "Win32-Front",
                 "ADB",
                 "PlayCover",
             ],
-            label: "$option.ZiplineImportClearLogin.label",
+            label: "$option.ZiplineImportAnotherAccount.label",
+            description: "$option.ZiplineImportAnotherAccount.description",
             cases: [
                 {
-                    name: "Yes",
-                    pipeline_override: {
-                        ZiplineImportMain: {
-                            attach: {
-                                clear_login: true,
-                            },
-                        },
-                    },
+                    name: "No",
                 },
                 {
-                    name: "No",
+                    name: "Yes",
+                    option: [
+                        "ZiplineImportUid",
+                    ],
                 },
             ],
             default_case: "No",
         },
+        ZiplineImportUid: {
+            type: "input",
+            controller: [
+                "Win32-Front",
+                "ADB",
+                "PlayCover",
+            ],
+            label: "$option.ZiplineImportUid.label",
+            description: "$option.ZiplineImportUid.description",
+            inputs: [
+                {
+                    name: "Uid",
+                    label: "$option.ZiplineImportUid.Uid.label",
+                    default: "",
+                    pipeline_type: "string",
+                    verify: "^(\\d{8,12})?$",
+                },
+            ],
+            pipeline_override: {
+                ZiplineImportMain: {
+                    attach: {
+                        uid: "{Uid}",
+                    },
+                },
+            },
+        },
     };
-    const taskOptions = ["ZiplineImportClearLogin"];
+    const taskOptions = [
+        "ZiplineImportAnotherAccount",
+    ];
 
     for (const region of regions) {
         const switchName = `ZiplineImport${region.regionKey}`;
