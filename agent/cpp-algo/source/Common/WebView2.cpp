@@ -74,27 +74,54 @@ std::wstring utf8ToWide(const std::string& src)
 // 一旦未来 Microsoft 把优先级调成参数 > env var（issue #1338 里 Microsoft
 // 也提过想这样调），第 2 步也能让我们继续命中专属 UDF，向前兼容。
 //
-// 保留 agent/<exe>.WebView2 的相对布局，锚在用户数据目录。
+// 默认 profile 保持在旧的 agent/<exe>.WebView2 相对布局，锚在用户数据目录；
+// 勾选「导入另一个账号」时按 UID 改用 debug/record/<uid>，让每个账号各持一份 Cookie / localStorage。
 // GetModuleFileNameW 仅用于获取 exe 文件名；失败时返回空路径，
 // 调用方回退到 nullptr 让 SDK 自己处理。
-std::filesystem::path redirect_user_data_folder()
+std::string mask_account_key(const std::string& key)
+{
+    if (key.size() <= 6u) {
+        return std::string(key.size(), '*');
+    }
+    return key.substr(0, 3) + std::string(key.size() - 6, '*') + key.substr(key.size() - 3);
+}
+
+std::filesystem::path default_user_data_folder()
 {
     wchar_t exe_buf[MAX_PATH] = {};
-    DWORD len = GetModuleFileNameW(nullptr, exe_buf, MAX_PATH);
+    const DWORD len = GetModuleFileNameW(nullptr, exe_buf, MAX_PATH);
     if (len == 0 || len >= MAX_PATH) {
         LogWarn << "WebView2: GetModuleFileNameW failed, fall back to inherited UDF env" << VAR(GetLastError());
         return {};
     }
-
     std::filesystem::path udf = common::UserDataPath("agent") / std::filesystem::path(exe_buf).filename();
     udf += L".WebView2";
+    return udf;
+}
+
+std::filesystem::path user_data_folder_path(const std::string& account_key)
+{
+    if (account_key.empty()) {
+        return default_user_data_folder();
+    }
+    return common::UserDataPath("debug/record") / std::string(account_key);
+}
+
+std::filesystem::path redirect_user_data_folder(const std::string& account_key)
+{
+    const std::filesystem::path udf = user_data_folder_path(account_key);
+    if (udf.empty()) {
+        return {};
+    }
 
     std::error_code ec;
     std::filesystem::create_directories(udf, ec);
     if (ec) {
         // 即便目录创建失败，仍然继续推进；后续 CreateCoreWebView2EnvironmentWithOptions
         // 会给出更精确的错误（如 E_ACCESSDENIED），避免我们在此默默回退到宿主共享 UDF。
-        LogWarn << "WebView2: create user data folder failed" << VAR(MAA_NS::path_to_utf8_string(udf)) << VAR(ec.message());
+        // 目录名含 UID，日志只写父目录
+        LogWarn << "WebView2: create user data folder failed" << VAR(MAA_NS::path_to_utf8_string(udf.parent_path()))
+                << VAR(ec.message());
     }
 
     if (!SetEnvironmentVariableW(L"WEBVIEW2_USER_DATA_FOLDER", udf.c_str())) {
@@ -103,7 +130,8 @@ std::filesystem::path redirect_user_data_folder()
         return udf;
     }
 
-    LogInfo << "WebView2: redirected user data folder" << VAR(MAA_NS::path_to_utf8_string(udf));
+    // 目录名含原始 UID，日志里只写打码后的 key
+    LogInfo << "WebView2: redirected user data folder" << VAR(account_key.empty() ? std::string {} : mask_account_key(account_key));
     return udf;
 }
 
@@ -143,6 +171,20 @@ void WebView2::SetClearWebData(bool enabled)
         return;
     }
     clear_web_data_ = enabled;
+}
+
+void WebView2::SetAccountKey(std::string account_key)
+{
+    if (isOpened()) {
+        LogWarn << "WebView2::SetAccountKey: ignored, must be called before Open()";
+        return;
+    }
+    account_key_ = std::move(account_key);
+}
+
+std::filesystem::path WebView2::UserDataFolder(const std::string& account_key)
+{
+    return user_data_folder_path(account_key);
 }
 
 void WebView2::SetTouchEmulation(bool enabled)
@@ -239,7 +281,7 @@ void WebView2::initializeWebView()
 
     // 必须在 CreateCoreWebView2EnvironmentWithOptions 之前完成；已经创建过的
     // environment 不会回头读环境变量。详见 redirect_user_data_folder 注释。
-    const std::filesystem::path udf = redirect_user_data_folder();
+    const std::filesystem::path udf = redirect_user_data_folder(account_key_);
     const wchar_t* udf_param = udf.empty() ? nullptr : udf.c_str();
 
     using Microsoft::WRL::Callback;
@@ -678,6 +720,11 @@ void WebView2::SetClearWebData(bool enabled)
     if (isOpened()) {
         LogWarn << "WebView2::SetClearWebData: ignored, must be called before Open()" << VAR(enabled);
     }
+}
+
+void WebView2::SetAccountKey(std::string account_key)
+{
+    LogWarn << "WebView2::SetAccountKey: no webview on this platform" << VAR(account_key.empty());
 }
 
 void WebView2::SetTouchEmulation(bool enabled)

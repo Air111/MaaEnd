@@ -4,6 +4,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
+#include <filesystem>
 #include <iterator>
 #include <memory>
 #include <mutex>
@@ -131,6 +132,8 @@ struct ImportParam
     int width = kDefaultWindowWidth;
     int height = kDefaultWindowHeight;
     bool clear_login = false;
+    // 可选: 用该 UID 的 WebView2 独立 profile 打开, 复用它上次保存的登录态
+    std::string uid;
     std::vector<std::string> template_ids;
     AreaSelection areas;
 };
@@ -183,6 +186,7 @@ ImportParam LoadParam(MaaContext* context, const char* node_name)
 
     const auto& attach = obj.at("attach").as_object();
     out.clear_login = attach.get("clear_login", out.clear_login);
+    out.uid = attach.get("uid", out.uid);
     for (const auto& [key, value] : attach) {
         if (key.rfind("include_map", 0) != 0) {
             continue;
@@ -221,6 +225,43 @@ std::string QueryValue(const std::string& url, const std::string& key)
     }
     return {};
 }
+
+#ifdef _WIN32
+// 日志里只保留首尾各 3 位
+std::string MaskUid(const std::string& uid)
+{
+    if (uid.size() <= 6u) {
+        return std::string(uid.size(), '*');
+    }
+    return uid.substr(0, 3) + std::string(uid.size() - 6, '*') + uid.substr(uid.size() - 3);
+}
+
+// 不勾选「导入另一个账号」时走默认 profile; 成功抓到账号后把这份站点数据复制到
+// debug/record/<roleId>, 以后勾选同一 UID 就能直接复用. 复制失败不影响本次导入.
+void SaveProfileSnapshot(const std::filesystem::path& source, const std::filesystem::path& target, const std::string& role_id)
+{
+    if (source.empty() || target.empty()) {
+        return;
+    }
+    std::error_code ec;
+    if (!std::filesystem::exists(source) || std::filesystem::exists(target)) {
+        return;
+    }
+    std::filesystem::create_directories(target.parent_path(), ec);
+    if (ec) {
+        LogWarn << "ZiplineImport: create snapshot dir failed" << VAR(ec.message());
+        return;
+    }
+    std::filesystem::copy(source, target, std::filesystem::copy_options::recursive, ec);
+    if (ec) {
+        LogWarn << "ZiplineImport: save the default profile failed" << VAR(MaskUid(role_id)) << VAR(ec.message());
+        std::error_code cleanup_ec;
+        std::filesystem::remove_all(target, cleanup_ec);
+        return;
+    }
+    LogInfo << "ZiplineImport: saved the default profile for reuse" << VAR(MaskUid(role_id));
+}
+#endif
 
 // roleId/serverId 只能在内存里参与账号匹配, 写日志前必须打码
 std::string RedactAccountQuery(std::string url)
@@ -595,6 +636,10 @@ MaaBool MAA_CALL ZiplineImportActionRun(
     }
 
     ImportParam param = LoadParam(context, node_name);
+    if (!param.uid.empty() && !IsValidRawUid(param.uid)) {
+        LogError << "ZiplineImport: uid must be 8-12 digits" << VAR(param.uid.size());
+        return false;
+    }
     switch (gamesetting::DetectGameRegion(MaaTaskerGetController(MaaContextGetTasker(context)))) {
     case gamesetting::Region::CN:
         param.url = kMapUrlCN;
@@ -626,11 +671,23 @@ MaaBool MAA_CALL ZiplineImportActionRun(
     webview->SetSize(param.width, param.height);
     webview->SetURL(param.url);
     webview->SetClearWebData(param.clear_login);
+    bool saved_session = false;
+#ifdef _WIN32
+    if (!param.uid.empty()) {
+        // 勾选清空登录态时会先删数据, 这次不能算命中
+        saved_session = !param.clear_login && std::filesystem::exists(WebView2::UserDataFolder(param.uid));
+        webview->SetAccountKey(param.uid);
+        LogInfo << "ZiplineImport: using account profile" << VAR(MaskUid(param.uid)) << VAR(saved_session) << VAR(param.clear_login);
+    }
+#endif
     if (!webview->Open()) {
         LogError << "ZiplineImport: webview open failed" << VAR(param.url);
         return false;
     }
-    common::notice::Publish(context, common::notice::Text("zipline.import_sign_in_hint"));
+    // 已命中保存的登录态时不再提示登录
+    if (!saved_session) {
+        common::notice::Publish(context, common::notice::Text("zipline.import_sign_in_hint"));
+    }
 
     auto state = std::make_shared<SniffState>();
     SubscribeSniffers(webview, state, param.mark_list_path);
@@ -773,6 +830,21 @@ MaaBool MAA_CALL ZiplineImportActionRun(
 
     const PersistResult persisted = PersistCaptured(captured, param.template_ids, param.areas);
     LogInfo << "ZiplineImport: done" << VAR(captured.size()) << VAR(persisted.total);
+#ifdef _WIN32
+    // 输入的 UID 只用来选保存的登录态; 数据归属始终以网页实际 roleId 为准.
+    // 新号第一次导入时两者可能不同, 不阻断也不改目录, 下次按实际 UID 另存即可.
+    if (persisted.total > 0 && !param.uid.empty() && !persisted.role_id.empty() && persisted.role_id != param.uid) {
+        LogInfo << "ZiplineImport: captured account differs from the entered uid, using the captured one"
+                << VAR(MaskUid(param.uid)) << VAR(MaskUid(persisted.role_id));
+    }
+    // 不勾选时走默认 profile; 成功后按实际 roleId 留一份快照, 供以后勾选 UID 时免登录
+    if (persisted.total > 0 && param.uid.empty() && !persisted.role_id.empty()) {
+        SaveProfileSnapshot(
+            WebView2::UserDataFolder(std::string {}),
+            WebView2::UserDataFolder(persisted.role_id),
+            persisted.role_id);
+    }
+#endif
     if (persisted.total > 0) {
         common::notice::Publish(
             context,
