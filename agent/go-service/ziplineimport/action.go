@@ -127,9 +127,15 @@ func (a *Action) Run(ctx *maa.Context, arg *maa.CustomActionArg) bool {
 					Msg("zipline import: selected subregions have no marks in the captured response")
 				continue
 			}
-			rec.mergeLevelMarks(accountID, mapID, levels, updated)
+			rec.mergeLevelMarks(accountID, roleID, mapID, levels, updated)
 		} else {
-			rec.replaceMap(ziplineMapRecord{AccountID: accountID, MapID: mapID, FetchedAt: currentTimestampUTC(), Marks: updated})
+			rec.replaceMap(ziplineMapRecord{
+				AccountID: accountID,
+				UID:       roleID,
+				MapID:     mapID,
+				FetchedAt: currentTimestampUTC(),
+				Marks:     updated,
+			})
 		}
 
 		// 逐 templateId 报数（排序保证日志稳定），与 cpp PersistCaptured 一致：标记类型只有编号
