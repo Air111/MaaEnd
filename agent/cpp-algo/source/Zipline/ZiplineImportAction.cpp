@@ -392,12 +392,14 @@ PersistResult PersistCaptured(
                 LogWarn << "ZiplineImport: selected subregions have no marks in the captured response" << VAR(map_id);
                 continue;
             }
-            store.mergeLevels(*account_id, map_id, levels, updated, CurrentTimestamp());
+            store.mergeLevels(*account_id, role_id, map_id, levels, updated, CurrentTimestamp());
         }
         else {
             updated = marks;
             ZiplineMapRecord record;
             record.account_id = *account_id;
+            // 原始 roleId 只作展示字段, 账号匹配仍用 account_id
+            record.uid = role_id;
             record.map_id = map_id;
             record.fetched_at = CurrentTimestamp();
             record.marks = updated;

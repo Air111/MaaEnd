@@ -31,6 +31,7 @@ type ziplineMark struct {
 // 遗留记录不能自动归入当前账号，否则换号后仍会静默使用错误坐标。
 type ziplineMapRecord struct {
 	AccountID string        `json:"account_id,omitempty"`
+	UID       string        `json:"uid,omitempty"` // 原始 roleId，仅供展示；匹配仍用 AccountID
 	MapID     string        `json:"map_id"`
 	FetchedAt string        `json:"fetched_at"`
 	Marks     []ziplineMark `json:"marks"`
@@ -80,9 +81,10 @@ func (r *recordFile) replaceMap(rec ziplineMapRecord) {
 
 // mergeLevelMarks 只替换这张图上指定 level 的标记，其余 level 原样保留。
 // selected 为空或 marks 为空时不应调用；调用方会先跳过缺失的小区，避免把没抓到的数据误删。
-func (r *recordFile) mergeLevelMarks(accountID, mapID string, selected map[string]bool, marks []ziplineMark) {
+func (r *recordFile) mergeLevelMarks(accountID, uid, mapID string, selected map[string]bool, marks []ziplineMark) {
 	rec := ziplineMapRecord{
 		AccountID: accountID,
+		UID:       uid,
 		MapID:     mapID,
 		FetchedAt: currentTimestampUTC(),
 		Marks:     marks,

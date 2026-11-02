@@ -84,6 +84,7 @@ bool ZiplineStore::load(const std::filesystem::path& path)
 
         ZiplineMapRecord record;
         record.account_id = obj.get("account_id", std::string {});
+        record.uid = obj.get("uid", std::string {});
         record.map_id = obj.get("map_id", std::string {});
         record.fetched_at = obj.get("fetched_at", std::string {});
         if (record.map_id.empty()) {
@@ -139,6 +140,9 @@ bool ZiplineStore::save(const std::filesystem::path& path) const
         if (!record.account_id.empty()) {
             map_obj["account_id"] = record.account_id;
         }
+        if (!record.uid.empty()) {
+            map_obj["uid"] = record.uid;
+        }
         map_obj["map_id"] = record.map_id;
         map_obj["fetched_at"] = record.fetched_at;
         map_obj["marks"] = std::move(marks);
@@ -188,6 +192,7 @@ void ZiplineStore::replaceMap(ZiplineMapRecord record)
 
 void ZiplineStore::mergeLevels(
     const std::string& account_id,
+    const std::string& uid,
     const std::string& map_id,
     const std::unordered_set<std::string>& levels,
     std::vector<ZiplineMark> marks,
@@ -199,6 +204,7 @@ void ZiplineStore::mergeLevels(
     if (it == maps_.end()) {
         ZiplineMapRecord record;
         record.account_id = account_id;
+        record.uid = uid;
         record.map_id = map_id;
         record.fetched_at = fetched_at;
         record.marks = std::move(marks);
@@ -216,6 +222,10 @@ void ZiplineStore::mergeLevels(
     kept.insert(kept.end(), std::make_move_iterator(marks.begin()), std::make_move_iterator(marks.end()));
     it->marks = std::move(kept);
     it->fetched_at = fetched_at;
+    // 旧记录可能还没有 uid, 本次导入能提供就补上
+    if (!uid.empty()) {
+        it->uid = uid;
+    }
 }
 
 std::string ZiplineStore::latestAccountId() const

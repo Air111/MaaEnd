@@ -24,6 +24,8 @@ struct ZiplineMapRecord
 {
     // 由 HashUidForAccount 生成, 为空表示待 claimLegacyRecords 认领的无主记录
     std::string account_id;
+    // 原始游戏 UID 或网页 roleId, 只用于展示; 匹配仍只看 account_id, 旧记录可能为空
+    std::string uid;
     std::string map_id;
     std::string fetched_at;
     std::vector<ZiplineMark> marks;
@@ -45,6 +47,7 @@ public:
     // 只替换指定 level 的标记，其他 level 原样保留；用于只导入部分小区。
     void mergeLevels(
         const std::string& account_id,
+        const std::string& uid,
         const std::string& map_id,
         const std::unordered_set<std::string>& levels,
         std::vector<ZiplineMark> marks,
