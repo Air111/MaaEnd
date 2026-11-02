@@ -6,6 +6,7 @@
 
 #include <condition_variable>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -57,6 +58,13 @@ public:
     // 在首次导航前清空网页数据（Cookie 与站点存储）。
     // 仅在 Open() 之前调用有效；清理失败时 Open() 返回 false，避免继续使用旧登录态。
     void SetClearWebData(bool enabled);
+
+    // 选择账号专属的 user data folder 后缀。空字符串表示沿用默认目录。
+    // 同一账号再次导入时复用同一份 Cookie / localStorage，从而免登录；仅限 Open() 之前调用。
+    void SetAccountKey(std::string account_key);
+
+    // 账号 key 对应的 user data folder（只计算路径，不创建目录）。Windows 专用。
+    static std::filesystem::path UserDataFolder(const std::string& account_key);
 
     // 启用 Chromium 触屏仿真（通过 CDP 的 Emulation.setTouchEmulationEnabled）。
     // 启用后 navigator/document 会上报具备触屏，document.createEvent("TouchEvent") 不再抛异常。
@@ -134,6 +142,7 @@ private:
     // 配置字段：仅在 Open() 之前由业务线程写入，UI 线程在 onControllerCreated 中读取一次。
     std::string initial_url_;
     std::string user_agent_;
+    std::string account_key_;
     bool clear_web_data_ = false;
     bool touch_emulation_ = false;
     bool context_menu_enabled_ = true;
@@ -171,6 +180,7 @@ public:
 
     void SetURL(std::string url);
     void SetClearWebData(bool enabled);
+    void SetAccountKey(std::string account_key);
     void SetTouchEmulation(bool enabled);
     void SetContextMenuEnabled(bool enabled);
     void SetUserAgent(std::string user_agent);
