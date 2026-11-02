@@ -117,7 +117,9 @@ bool sync_zipline_mount_scanner(Navigator* nav, const Waypoint& waypoint)
 bool consume_zipline_mount_prompt(Navigator* nav, const RouteMeasurement& route)
 {
     const bool flagged = nav->zipline_mount_scanner->consumeDetection();
-    return flagged && route.startup_motion_confirmed && route.waypoint_distance <= kPromptTriggerBandWu;
+    // 起点就可能站在上索点旁(上一个动作刚把人放在架子边): 提示已经亮着时不必先走开一段再走回来,
+    // 所以不再要求"本腿已经迈过步". 判定圈仍收在航点附近, 免得把别的设备的提示当成这一跳的上索点.
+    return flagged && route.waypoint_distance <= kPromptTriggerBandWu;
 }
 
 // 交互一开角色就不动、小地图也没了, 所以提示命中即算走完
