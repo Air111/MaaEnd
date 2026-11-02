@@ -157,7 +157,9 @@ bool NavigationStateMachine::tryZiplineMountPrompt(const Waypoint& waypoint, con
         return false;
     }
     const bool flagged = zipline_mount_scanner_->consumeDetection();
-    return flagged && route.startup_motion_confirmed && route.waypoint_distance <= kPromptTriggerBandWu;
+    // 起点就可能站在上索点旁(上一个动作刚把人放在架子边): 提示已经亮着时不必先走开一段再走回来,
+    // 所以不再要求"本腿已经迈过步". 判定圈仍收在航点附近, 免得把别的设备的提示当成这一跳的上索点.
+    return flagged && route.waypoint_distance <= kPromptTriggerBandWu;
 }
 
 NavigationStateMachine::PromptDistance NavigationStateMachine::nearestPromptDistance() const
