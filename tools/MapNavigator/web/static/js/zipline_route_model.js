@@ -359,9 +359,19 @@ export function findReusableZiplineSegment(
  * @param {Array<Object>} chainTowers selected tower objects in order
  * @param {boolean[]} [eHops] per-hop E-chain flags, one per tower gap
  * @param {string} [entry] teleport entry node the runtime should run first
+ * @param {number[]} [photoGoal] custom photo point; omitted when the task should use the original goal
+ * @param {?number} [photoHeading] custom heading; omitted to keep the original Heading
  * @returns {Object}
  */
-export function buildSavedRoutePayload(accountId, target, chainTowers, eHops = [], entry = "") {
+export function buildSavedRoutePayload(
+  accountId,
+  target,
+  chainTowers,
+  eHops = [],
+  entry = "",
+  photoGoal = null,
+  photoHeading = null,
+) {
   const hopCount = Math.max(0, chainTowers.length - 1);
   const payload = {
     account_id: String(accountId || ""),
@@ -380,6 +390,16 @@ export function buildSavedRoutePayload(accountId, target, chainTowers, eHops = [
   };
   const normalizedEntry = String(entry || "").trim();
   if (normalizedEntry) payload.entry = normalizedEntry;
+  if (
+    Array.isArray(photoGoal) &&
+    photoGoal.length === 2 &&
+    photoGoal.every((value) => Number.isFinite(Number(value)))
+  ) {
+    payload.photo_goal = [Number(photoGoal[0]), Number(photoGoal[1])];
+    if (payload.goal_deck_y !== null) payload.photo_deck_y = payload.goal_deck_y;
+    const heading = finite(photoHeading);
+    if (heading !== null) payload.photo_heading = heading;
+  }
   return payload;
 }
 

@@ -1,6 +1,8 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -29,6 +31,11 @@ struct NaviParam
     bool zipline_enabled = false;
     // 伪匿名账号标识, 滑索记录先按它隔离再按地图筛选, 为空则不用滑索
     std::string zipline_account_id;
+    // 手工滑索链的匹配目标; 缺省用 path 的终点. path 的终点仍决定下索后的去路,
+    // 这里只让「换了拍照点」的路线仍能命中原观察点保存的链.
+    std::optional<std::array<double, 2>> zipline_match_goal;
+    // 手工滑索链的匹配层高; 缺省用 path 终点的层高
+    std::optional<double> zipline_match_deck_y;
     // 展开前的作者路线, path 是展开后的
     std::vector<Waypoint> authored_path;
     // 本次导航各跳的记录, 重展开时用来排除出过问题的索
