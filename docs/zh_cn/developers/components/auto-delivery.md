@@ -123,7 +123,7 @@ Go 侧的 `AutoDeliveryResolveDepotAction` / `AutoDeliveryResolveDestinationActi
 | --- | --- | --- |
 | `depots` | `path` | 从快速传送落点前往仓储的完整 MapNavigator 路线；未配置时使用自动生成的仓储坐标 |
 | `depots` | `retry_path` | 覆盖环绕搜索后仍未识别到取货按钮时执行的自动两点站位修正路线 |
-| `depots` | `departure_path` | 拼接到该仓储所属终点路线前的公共离场路线 |
+| `depots` | `departure_path` | 拼接到该仓储所属终点**步行变体**前的公共离场路线；`...WithZipline` 变体不拼——离场段只为步行离场服务，滑索变体按终点路线正常走到上索起点即可（离场段里的跳板一类动作不需要），否则会先走到离场点再折回上索站位 |
 | `depots` | `yaw` | 覆盖主路线接近点与自动重试路线使用的朝向角；仓储朝向墙体时使用 |
 | `depots` | `offset` | 微调自动生成的仓储导航落点（底图像素偏移） |
 | `depots` | `walk_only` / `zipline_only` | 覆盖该仓储主路线的滑索策略，见下节；二者互斥 |
