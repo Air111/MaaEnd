@@ -95,6 +95,7 @@ The minimum unit price (task option `SellProductStockMinimumUnitPrice`, default 
 - Two modes: Keep Specified Quantity / Never Sell (internally quantity `-1`); quantity `0` means keep nothing; for duplicated items the later slot wins.
 - Activity items are sold in one batch against the activity quota, so reserve rules never apply to them and the slots list no activity items; priority selling options are unaffected.
 - "Keep Specified Quantity" uses BetterSliding `ReverseTarget` to sell only the excess; reaching the reserve in one trade, or stock already at/below the reserve, both `satisfy` the item for this task so later outposts skip it during selection.
+- Selling quantities use a ±100 tolerance (BetterSliding `QuantityTolerance: 100`): after dragging, a difference within 100 counts as done without ± fine-tuning; above 100, only the excess is added.
 - "Never Sell" excludes the item during selection recognition — no goods switching, never marked out of stock.
 
 ### Out of Stock
@@ -113,6 +114,7 @@ Pre-sell (switch to the selling operator) and post-sell (restore production assi
 4. within a tier, stable game-list order (count of matched outpost `features` desc → numeric charId desc; rarity is irrelevant).
 
 When outpost prosperity is maxed, prosperity bonuses stop counting and only trade income defines the tiers. A "perfect candidate" is the intersection of the outpost's top selling tier and its restore candidates; if the account owns any perfect candidate, planning picks only from them (even if one is occupied by another enabled outpost — no downgrade), otherwise it falls back to the top available tier. If the current operator already belongs to the best available tier, it is kept without opening the list.
+- With "Ignore Outpost Prosperity" enabled, every outpost is treated as prosperity-maxed and operators are tiered by trade income only; prosperity is still recognized and written back to the cache.
 
 ### Post-sell Restore Assignment
 

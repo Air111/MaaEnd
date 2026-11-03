@@ -33,6 +33,9 @@ struct ZiplineRoute
     navmesh::WorldPath departure; // 下索点 → 终点
     // 至少两根, 中间的既是上一跳落点也是下一跳上索点
     std::vector<zipline::ZiplineNode> towers;
+    // 与 towers 逐跳对应; 手工链的自动终点标记. true 表示这一跳的起点塔设置了自动终点,
+    // 实际按 E 在进入该塔的上一段; 第一条跳没有上一段, 运行时忽略.
+    std::vector<bool> e_hops;
     // 与 towers 逐跳对应(最后一根没有), 列出这根架子上下一跳以外的索通向的架子
     std::vector<std::vector<zipline::ZiplineNode>> hop_alternates;
     // 折算成等效走路距离

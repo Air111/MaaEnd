@@ -491,6 +491,20 @@ func normalizeFineTuneFallback(raw string) (string, error) {
 	}
 }
 
+// normalizeQuantityTolerance 归一化 QuantityTolerance：
+// 未提供（present=false，含显式 null）-> 0，表示关闭容错；
+// 整数须 >= 1，写 0 或负数都视为配置错误，避免把「配错了」静默当成关闭。
+func normalizeQuantityTolerance(raw int, present bool) (int, error) {
+	if !present {
+		return 0, nil
+	}
+	if raw < 1 {
+		return 0, fmt.Errorf("QuantityTolerance must be an integer >= 1, got %d", raw)
+	}
+
+	return raw, nil
+}
+
 func isSwipeOnlyMode(params betterSlidingParam) bool {
 	return !params.presence.TargetQuantity &&
 		!params.presence.SliderQuantity &&
@@ -506,5 +520,6 @@ func isSwipeOnlyMode(params betterSlidingParam) bool {
 		!params.presence.CenterPointOffset &&
 		!params.presence.ClampTargetToSliderMax &&
 		!params.presence.FineTuneQuantity &&
-		!params.presence.FineTuneFallback
+		!params.presence.FineTuneFallback &&
+		!params.presence.QuantityTolerance
 }

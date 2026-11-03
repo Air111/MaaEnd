@@ -4,7 +4,7 @@
         {
             "name": "SeizeDeliveryJobs",
             "label": "$task.SeizeDeliveryJobs.label",
-            "entry": "SeizeDeliveryJobsCheckOngoingJob",
+            "entry": "SeizeDeliveryJobsCaptureUid",
             "description": "$task.SeizeDeliveryJobs.description",
             "group": [
                 "regional_development"
@@ -18,8 +18,8 @@
                 "PlayCover",
                 "Win32-Front"
             ],
-            // 任务入口门控自己判定身上是否已有送货委托；只有组件确认「委托列表已滑到底」
-            // （AutoDeliveryDeliveryMissionNotFound）才放行到无单主流程，其余失败停在门控里报错。
+            // 身上已有委托时就地转入转交流程，由 AutoDeliveryOpenDeliveryMission 进入任务详情；
+            // 只有组件确认「委托列表已滑到底」（AutoDeliveryDeliveryMissionNotFound）才放行到无单主流程。
             "pipeline_override": {
                 "AutoDeliveryDeliveryMissionNotFound": {
                     "anchor": {
@@ -30,6 +30,7 @@
             "option": [
                 "SeizeDeliveryJobsReward",
                 "SeizeDeliveryJobsRefreshLimit",
+                "SeizeDeliveryJobsForceZiplineAccount",
                 "SeizeDeliveryJobsCommissionSource",
                 "SeizeDeliveryJobsPostProcessing"
             ]
@@ -352,6 +353,27 @@
                 }
             ],
             "default_case": "3"
+        },
+        "SeizeDeliveryJobsForceZiplineAccount": {
+            "type": "switch",
+            "label": "$task.SeizeDeliveryJobsForceZiplineAccount.label",
+            "description": "$task.SeizeDeliveryJobsForceZiplineAccount.description",
+            "cases": [
+                {
+                    "name": "No"
+                },
+                {
+                    "name": "Yes",
+                    "pipeline_override": {
+                        "MapNavigatorZiplineAccount": {
+                            "attach": {
+                                "force_first": true
+                            }
+                        }
+                    }
+                }
+            ],
+            "default_case": "No"
         }
     }
 }

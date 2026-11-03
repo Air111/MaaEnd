@@ -227,7 +227,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "AnnularWaterfallInQuickTeleportMap"
+            "AnnularWaterfallGoTargetAfterTrack"
         ]
     },
     "AlreadyTrackedAnnularWaterfall": {
@@ -241,7 +241,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "AnnularWaterfallOpenTrackedMissionMap"
+            "AnnularWaterfallGoTargetAfterTracked"
         ]
     },
     "AnnularWaterfallOpenTrackedMissionMap": {
@@ -315,7 +315,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToAnnularWaterfallMove"
+            "AnnularWaterfallTeleportDone"
         ]
     },
     "AnnularWaterfallNotAdapted": {
@@ -326,6 +326,120 @@
         "focus": {
             "Node.Recognition.Succeeded": "$task.EnvironmentMonitoring.not_adapted"
         }
+    },
+    "AnnularWaterfallGoTarget": {
+        "desc": "判断是否使用保存的滑索路径前往环形瀑布；没有保存路径时走原有传送流程",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                1364.14,
+                2147.09
+            ],
+            "zip_move": "AnnularWaterfallMoveWithZipline",
+            "fallback": "GoToAnnularWaterfall"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "AnnularWaterfallMoveWithZipline",
+            "GoToAnnularWaterfallMove"
+        ]
+    },
+    "AnnularWaterfallGoTargetAfterTrack": {
+        "desc": "刚点击追踪，判断是否使用保存的滑索路径前往环形瀑布",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                1364.14,
+                2147.09
+            ],
+            "zip_move": "AnnularWaterfallMoveWithZipline",
+            "fallback": "AnnularWaterfallInQuickTeleportMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "AnnularWaterfallMoveWithZipline",
+            "GoToAnnularWaterfallMove"
+        ]
+    },
+    "AnnularWaterfallGoTargetAfterTracked": {
+        "desc": "任务已在追踪中，判断是否使用保存的滑索路径前往环形瀑布",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                1364.14,
+                2147.09
+            ],
+            "zip_move": "AnnularWaterfallMoveWithZipline",
+            "fallback": "AnnularWaterfallOpenTrackedMissionMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "AnnularWaterfallMoveWithZipline",
+            "GoToAnnularWaterfallMove"
+        ]
+    },
+    "AnnularWaterfallMoveWithZipline": {
+        "desc": "沿保存的滑索路径前往环形瀑布",
+        // 只有 ZiplineRouteGoAction 命中手工链时才打开；默认禁用，保证没有保存路径时不启用滑索。
+        "enabled": false,
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "MapNavigateAction",
+        "custom_action_param": {
+            "path": [
+                {
+                    "action": "ZONE",
+                    "zone_id": "Wuling_Base"
+                },
+                {
+                    "action": "NAVMESH",
+                    "target": [
+                        1364.14,
+                        2147.09
+                    ]
+                },
+                {
+                    "action": "HEADING",
+                    "angle": 15
+                }
+            ],
+            "zip": true
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "AnnularWaterfallTakePhoto"
+        ],
+        // 滑索导航失败时退回同一目标点的步行路线。
+        "on_error": [
+            "GoToAnnularWaterfallMove"
+        ],
+        "focus": {
+            "Node.Action.Succeeded": {
+                "trace": true
+            },
+            "Node.Action.Failed": {
+                "trace": true
+            }
+        }
+    },
+    "AnnularWaterfallTeleportDone": {
+        "desc": "传送流程结束，交回目标点决策节点继续",
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0
     },
     "GoToAnnularWaterfall": {
         "desc": "前往环形瀑布，先回到大世界再进行判断",
@@ -361,7 +475,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToAnnularWaterfallMove"
+            "AnnularWaterfallTeleportDone"
         ]
     },
     "GoToAnnularWaterfallNotAtStartPos": {
@@ -377,7 +491,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToAnnularWaterfallMove"
+            "AnnularWaterfallTeleportDone"
         ]
     },
     "GoToAnnularWaterfallMove": {

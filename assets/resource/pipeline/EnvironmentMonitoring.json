@@ -1,4 +1,20 @@
 {
+    "EnvironmentMonitoringCaptureUid": {
+        "desc": "任务开始先补一次账号识别；已缓存时直接跳过，手工滑索路径按账号匹配",
+        "recognition": "DirectHit",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "CaptureUid",
+        "custom_action_param": {
+            "use_cache": true,
+            "stay_on_current_screen": true,
+            "allow_unknown": true
+        },
+        "post_delay": 0,
+        "next": [
+            "EnvironmentMonitoringMain"
+        ]
+    },
     "EnvironmentMonitoringMain": {
         "desc": "环境监测主流程",
         "pre_delay": 0,

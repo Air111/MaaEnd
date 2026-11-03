@@ -239,9 +239,11 @@
     "visitfriends.growth_chamber_assist": "成長室支援",
     "visitfriends.mfg_cabin_assist": "製造キャビン支援",
     "visitfriends.no_assist_enabled": "支援方式を1つ以上選択してください",
+    "zipline.route.using_saved": "🚡 保存済みのジップライン経路で %s へ向かいます",
     "ziplineimport.android_unsupported": "Android 版はジップライン座標の取込にまだ対応していません。",
     "ziplineimport.captured_done": "UID %s：ジップライン取込完了：%d マップ、%d 本のジップライン架台を取得",
     "ziplineimport.login_ok": "ログインに成功しました。ジップラインをインポート／更新しています",
+    "ziplineimport.no_area_selected": "インポートする大エリアまたはサブエリアを少なくとも 1 つ選択してください。",
     "ziplineimport.region_unsupported": "Linux 版のジップライン取込はグローバルサーバー（SKPORT）にまだ対応していません。リージョンを CN に戻して再試行してください。",
     "ziplineimport.sign_in_hint": "開いたブラウザーウィンドウで、マップページ右上の「ログイン」をクリックし、ジップライン座標をインポート／更新したいゲームアカウントでログインしてください。"
 }

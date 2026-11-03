@@ -20,6 +20,7 @@ type actionParam struct {
 	TemplateIDs []string `json:"template_ids"`
 	Firefox     string   `json:"firefox"`
 	ProxyPort   int      `json:"proxy_port"`
+	Areas       areaSelection
 }
 
 const (
@@ -78,6 +79,10 @@ func loadParam(ctx *maa.Context, nodeName string) actionParam {
 	}
 	if attach.ProxyPort != 0 {
 		p.ProxyPort = attach.ProxyPort
+	}
+	var flags map[string]any
+	if err := json.Unmarshal(node.Attach, &flags); err == nil {
+		p.Areas = newAreaSelection(flags)
 	}
 	p.URL = defaultMapURL
 	return p

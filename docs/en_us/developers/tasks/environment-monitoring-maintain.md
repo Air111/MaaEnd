@@ -15,7 +15,7 @@ The core maintenance points for Environment Monitoring are as follows:
 | Module | Path | Function |
 | ----------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Task Entry | `assets/tasks/EnvironmentMonitoring.json` | Interface task definition (no configurable options, controller = Win32-Front / Linux / ADB / CloudADB / PlayCover) |
-| Main Flow Pipeline | `assets/resource/pipeline/EnvironmentMonitoring.json` | Main entry node `EnvironmentMonitoringMain`, loops to identify the two monitoring terminals |
+| Main Flow Pipeline | `assets/resource/pipeline/EnvironmentMonitoring.json` | Main entry node `EnvironmentMonitoringCaptureUid` (captures the account once) → `EnvironmentMonitoringMain`, loops to identify the two monitoring terminals |
 | Terminal Grouping (Generated) | `assets/resource/pipeline/EnvironmentMonitoring/Terminals.json` | Entry nodes for Outskirts Monitoring Terminal / Marker Stone Monitoring Terminal and their respective observation point `next` lists (**generated**) |
 | Terminal Jump | `assets/resource/pipeline/EnvironmentMonitoring/Locations.json` | `EnvironmentMonitoringGoTo*` and `Select*` nodes, enter the corresponding terminal from the main menu |
 | Photo Taking Flow | `assets/resource/pipeline/EnvironmentMonitoring/TakePhoto.json` | Enter photo mode, adjust orientation, identify the photo button, return to terminal after achieving the goal |
@@ -52,6 +52,8 @@ EnvironmentMonitoringMain
        │         └─ EnvironmentMonitoringTerminalFinish
        └─ EnvironmentMonitoringFinish
 ```
+
+The task entry is `EnvironmentMonitoringCaptureUid`: it captures the account once before `EnvironmentMonitoringMain`. When a navigation route ends on a base-pixel goal, the generator emits a zipline branch that prefers the saved chain's teleport entry and zipline navigation, falling back to the original teleport/walk flow otherwise. The `Prefer ziplines` task option (`SavedZiplineRoutePreference.attach.prefer_saved`) controls whether that branch is attempted: when off, the task does not read saved zipline routes and keeps the original teleport/walk flow. If a saved chain carries a custom photo point (`photo_goal` / `photo_heading` in `ZiplineRoutes.json`), `ZiplineRouteGoAction` rewrites the branch's `zip_move` to "keep ZONE, drop the authored via points, end at `photo_goal` with `photo_heading`" and passes `zipline_match_goal` so the chain still matches the original observation point's goal; the walking branch is unchanged.
 
 The internal chain for each observation point `{Id}Job` (rendered by `template.json`):
 
@@ -180,8 +182,9 @@ The default export of `data.mjs` is an array, where each element = the rendering
 | `OcrReplace` | Passed through from `routes.json[*].Replace` to `Check${Id}Text.replace` and `In${Id}Mission.replace`; used to configure task-specific OCR replacement pairs for the task list and mission detail page, without affecting route adaptation checks |
 | `ExpectedText` | Automatically expanded from `mission.names` in `environment_monitoring.json` (5 languages, English converted to flexible regex) |
 | `InExpectedText` | Automatically expanded from `mission.shot_target_names` in `environment_monitoring.json`; quotes and apostrophes are relaxed to an optional single-character wildcard `.?` (a trailing one is dropped), so a mobile OCR that cannot read the quotes still matches the photo title |
-| `TrackOrGoToNext` / `AfterTrackNext` / `AfterAlreadyTrackedNext` | Automatically determined by `data.mjs` based on whether the route is complete and on `QuickTeleport`: by default the flow enters `GoTo${Id}`; with quick teleport, it waits for the mission map after tracking starts, or, if the mission is already tracked, first clicks the locate icon to open the mission map; when not adapted, it enters `${Id}NotAdapted` |
-| `GoToNext` / `AfterTeleportDescription` / `AfterTeleportNext` | Automatically determined by `data.mjs` based on the teleport entry and route type: direct-photo routes always perform a real teleport, then enter `GoTo${Id}Move` to turn in place when `Heading` is set, or `${Id}TakePhoto` otherwise; navigation routes proceed directly to `GoTo${Id}Move` after teleporting |
+| `TrackOrGoToNext` / `AfterTrackNext` / `AfterAlreadyTrackedNext` | Automatically determined by `data.mjs` based on whether the route is complete and on `QuickTeleport`: by default the flow enters `GoTo${Id}`; with quick teleport, it waits for the mission map after tracking starts, or, if the mission is already tracked, first clicks the locate icon to open the mission map; when not adapted, it enters `${Id}NotAdapted`; when a zipline branch is generated, it enters `${Id}GoTarget*` instead |
+| `GoToNext` / `AfterTeleportDescription` / `AfterTeleportNext` | Automatically determined by `data.mjs` based on the teleport entry and route type: direct-photo routes always perform a real teleport, then enter `GoTo${Id}Move` to turn in place when `Heading` is set, or `${Id}TakePhoto` otherwise; navigation routes proceed directly to `GoTo${Id}Move` after teleporting; when a zipline branch is generated, it enters `${Id}TeleportDone` instead |
+| `ZiplineGoParam` / `ZipRouteActionParam` | Parameters for `ZiplineRouteGoAction` and the `zip: true` move used only by generated zipline branches |
 
 ### Terminal Grouping: `terminals-config.json`
 

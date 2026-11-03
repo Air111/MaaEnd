@@ -106,22 +106,50 @@ test("selects the latest imported account only for offline map inspection", () =
   assert.deepEqual(projected[0].world, [-1500, 320, -530]);
 });
 
-test("lists each account once by latest import time and formats a compact label", () => {
+test("lists each account once by latest import time and prefers the raw uid in the label", () => {
   const records = {
     maps: [
-      {account_id: "0123456789abcdef", map_id: "map01", fetched_at: "2026-09-01T10:00:00Z", marks: []},
+      {
+        account_id: "0123456789abcdef",
+        uid: "1052452750",
+        map_id: "map01",
+        fetched_at: "2026-09-01T10:00:00Z",
+        marks: [],
+      },
       {account_id: "fedcba9876543210", map_id: "map02", fetched_at: "2026-09-02T08:00:00Z", marks: []},
-      {account_id: "0123456789abcdef", map_id: "map02", fetched_at: "2026-09-03T12:00:00Z", marks: []},
+      {
+        account_id: "0123456789abcdef",
+        uid: "1052452750",
+        map_id: "map02",
+        fetched_at: "2026-09-03T12:00:00Z",
+        marks: [],
+      },
       {map_id: "map02", fetched_at: "2026-09-04T12:00:00Z", marks: []},
     ],
   };
 
   const accounts = listZiplineAccounts(records);
   assert.deepEqual(accounts, [
-    {accountId: "0123456789abcdef", fetchedAt: "2026-09-03T12:00:00Z"},
-    {accountId: "fedcba9876543210", fetchedAt: "2026-09-02T08:00:00Z"},
+    {accountId: "0123456789abcdef", uid: "1052452750", fetchedAt: "2026-09-03T12:00:00Z"},
+    {accountId: "fedcba9876543210", uid: "", fetchedAt: "2026-09-02T08:00:00Z"},
   ]);
-  assert.equal(ziplineAccountLabel(accounts[0]), "账号 012345…cdef · 2026-09-03");
+  assert.equal(ziplineAccountLabel(accounts[0]), "UID 1052452750 · 2026-09-03");
+  // 旧记录没有 uid 时退回原来的伪匿名缩写
+  assert.equal(ziplineAccountLabel(accounts[1]), "账号 fedcba…3210 · 2026-09-02");
+});
+
+test("falls back to an older record's uid when the latest record lacks it", () => {
+  const records = {
+    maps: [
+      {account_id: "account-a", uid: "1299473636", map_id: "map01", fetched_at: "2026-09-01T10:00:00Z", marks: []},
+      {account_id: "account-a", map_id: "map02", fetched_at: "2026-09-03T12:00:00Z", marks: []},
+    ],
+  };
+
+  const accounts = listZiplineAccounts(records);
+  assert.equal(accounts.length, 1);
+  assert.equal(accounts[0].uid, "1299473636");
+  assert.equal(accounts[0].fetchedAt, "2026-09-03T12:00:00Z");
 });
 
 test("measures the possible center span range and reports its components", () => {

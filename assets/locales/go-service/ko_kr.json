@@ -239,9 +239,11 @@
     "visitfriends.growth_chamber_assist": "성장실 지원",
     "visitfriends.mfg_cabin_assist": "제조 캐빈 지원",
     "visitfriends.no_assist_enabled": "최소 하나 이상의 지원 방식을 선택해야 합니다",
+    "zipline.route.using_saved": "🚡 저장된 집라인 경로로 %s(으)로 이동합니다",
     "ziplineimport.android_unsupported": "Android에서는 아직 짚라인 좌표 가져오기를 지원하지 않습니다.",
     "ziplineimport.captured_done": "UID %s: 짚라인 가져오기 완료: %d개 맵, %d개 짚라인 랙 캡처",
     "ziplineimport.login_ok": "로그인 성공, 짚라인을 가져오는 중/갱신 중",
+    "ziplineimport.no_area_selected": "가져올 대지역 또는 하위 지역을 하나 이상 선택하십시오.",
     "ziplineimport.region_unsupported": "Linux 짚라인 가져오기는 아직 글로벌 서버(SKPORT)를 지원하지 않습니다. 지역을 CN으로 되돌린 후 다시 시도해 주세요.",
     "ziplineimport.sign_in_hint": "방금 열린 브라우저 창에서 지도 페이지 오른쪽 상단의 「로그인」을 누른 뒤, 짚라인을 가져오거나 갱신할 게임 계정으로 로그인하십시오."
 }

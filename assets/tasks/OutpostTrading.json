@@ -4154,7 +4154,8 @@
                 {
                     "name": "Yes",
                     "option": [
-                        "SellProductForceRefreshOperatorCache"
+                        "SellProductForceRefreshOperatorCache",
+                        "SellProductIgnoreOutpostProsperity"
                     ]
                 },
                 {
@@ -4892,6 +4893,27 @@
                                     700,
                                     430
                                 ]
+                            }
+                        }
+                    }
+                }
+            ],
+            "default_case": "No"
+        },
+        "SellProductIgnoreOutpostProsperity": {
+            "type": "switch",
+            "label": "$task.OutpostTrading.IgnoreOutpostProsperity",
+            "description": "$task.OutpostTrading.IgnoreOutpostProsperityDescription",
+            "cases": [
+                {
+                    "name": "No"
+                },
+                {
+                    "name": "Yes",
+                    "pipeline_override": {
+                        "OutpostTradingInitializeOperatorSession": {
+                            "attach": {
+                                "ignore_outpost_prosperity": true
                             }
                         }
                     }

@@ -227,7 +227,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "PoolLotusInQuickTeleportMap"
+            "PoolLotusGoTargetAfterTrack"
         ]
     },
     "AlreadyTrackedPoolLotus": {
@@ -241,7 +241,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "PoolLotusOpenTrackedMissionMap"
+            "PoolLotusGoTargetAfterTracked"
         ]
     },
     "PoolLotusOpenTrackedMissionMap": {
@@ -315,7 +315,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToPoolLotusMove"
+            "PoolLotusTeleportDone"
         ]
     },
     "PoolLotusNotAdapted": {
@@ -326,6 +326,120 @@
         "focus": {
             "Node.Recognition.Succeeded": "$task.EnvironmentMonitoring.not_adapted"
         }
+    },
+    "PoolLotusGoTarget": {
+        "desc": "判断是否使用保存的滑索路径前往小池荷；没有保存路径时走原有传送流程",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                573.36,
+                2219.06
+            ],
+            "zip_move": "PoolLotusMoveWithZipline",
+            "fallback": "GoToPoolLotus"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "PoolLotusMoveWithZipline",
+            "GoToPoolLotusMove"
+        ]
+    },
+    "PoolLotusGoTargetAfterTrack": {
+        "desc": "刚点击追踪，判断是否使用保存的滑索路径前往小池荷",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                573.36,
+                2219.06
+            ],
+            "zip_move": "PoolLotusMoveWithZipline",
+            "fallback": "PoolLotusInQuickTeleportMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "PoolLotusMoveWithZipline",
+            "GoToPoolLotusMove"
+        ]
+    },
+    "PoolLotusGoTargetAfterTracked": {
+        "desc": "任务已在追踪中，判断是否使用保存的滑索路径前往小池荷",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                573.36,
+                2219.06
+            ],
+            "zip_move": "PoolLotusMoveWithZipline",
+            "fallback": "PoolLotusOpenTrackedMissionMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "PoolLotusMoveWithZipline",
+            "GoToPoolLotusMove"
+        ]
+    },
+    "PoolLotusMoveWithZipline": {
+        "desc": "沿保存的滑索路径前往小池荷",
+        // 只有 ZiplineRouteGoAction 命中手工链时才打开；默认禁用，保证没有保存路径时不启用滑索。
+        "enabled": false,
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "MapNavigateAction",
+        "custom_action_param": {
+            "path": [
+                {
+                    "action": "ZONE",
+                    "zone_id": "Wuling_Base"
+                },
+                {
+                    "action": "NAVMESH",
+                    "target": [
+                        573.36,
+                        2219.06
+                    ]
+                },
+                {
+                    "action": "HEADING",
+                    "angle": 180
+                }
+            ],
+            "zip": true
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "PoolLotusTakePhoto"
+        ],
+        // 滑索导航失败时退回同一目标点的步行路线。
+        "on_error": [
+            "GoToPoolLotusMove"
+        ],
+        "focus": {
+            "Node.Action.Succeeded": {
+                "trace": true
+            },
+            "Node.Action.Failed": {
+                "trace": true
+            }
+        }
+    },
+    "PoolLotusTeleportDone": {
+        "desc": "传送流程结束，交回目标点决策节点继续",
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0
     },
     "GoToPoolLotus": {
         "desc": "前往小池荷，先回到大世界再进行判断",
@@ -361,7 +475,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToPoolLotusMove"
+            "PoolLotusTeleportDone"
         ]
     },
     "GoToPoolLotusNotAtStartPos": {
@@ -377,7 +491,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToPoolLotusMove"
+            "PoolLotusTeleportDone"
         ]
     },
     "GoToPoolLotusMove": {

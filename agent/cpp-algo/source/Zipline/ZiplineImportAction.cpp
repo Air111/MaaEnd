@@ -4,6 +4,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
+#include <filesystem>
 #include <iterator>
 #include <memory>
 #include <mutex>
@@ -50,6 +51,78 @@ constexpr int kIdleCloseMs = 20000;
 constexpr int kDefaultWindowWidth = 1280;
 constexpr int kDefaultWindowHeight = 720;
 
+struct AreaSelection
+{
+    bool explicit_filter = false;
+    std::unordered_set<std::string> maps;
+    std::unordered_set<std::string> levels;
+
+    static std::string MapOfLevel(const std::string& level_id)
+    {
+        const size_t pos = level_id.find("_lv");
+        return pos == std::string::npos ? std::string {} : level_id.substr(0, pos);
+    }
+
+    bool IncludesMap(const std::string& map_id) const
+    {
+        if (!explicit_filter || maps.count(map_id) != 0) {
+            return true;
+        }
+        const std::string prefix = map_id + "_";
+        return std::any_of(levels.begin(), levels.end(), [&prefix](const std::string& level) {
+            return level.rfind(prefix, 0) == 0;
+        });
+    }
+
+    bool FullyIncludesMap(const std::string& map_id) const { return !explicit_filter || maps.count(map_id) != 0; }
+
+    bool IncludesLevel(const std::string& level_id) const
+    {
+        if (!explicit_filter) {
+            return true;
+        }
+        if (level_id.empty()) {
+            return false;
+        }
+        return maps.count(MapOfLevel(level_id)) != 0 || levels.count(level_id) != 0;
+    }
+
+    std::unordered_set<std::string> LevelsForMap(const std::string& map_id) const
+    {
+        std::unordered_set<std::string> selected;
+        if (maps.count(map_id) != 0) {
+            return selected;
+        }
+        const std::string prefix = map_id + "_";
+        for (const std::string& level : levels) {
+            if (level.rfind(prefix, 0) == 0) {
+                selected.insert(level);
+            }
+        }
+        return selected;
+    }
+
+    std::vector<std::string> SelectedMaps(const std::vector<std::string>& all) const
+    {
+        if (!explicit_filter) {
+            return all;
+        }
+        std::vector<std::string> selected;
+        for (const std::string& map_id : maps) {
+            if (std::find(selected.begin(), selected.end(), map_id) == selected.end()) {
+                selected.push_back(map_id);
+            }
+        }
+        for (const std::string& level : levels) {
+            const std::string map_id = MapOfLevel(level);
+            if (!map_id.empty() && std::find(selected.begin(), selected.end(), map_id) == selected.end()) {
+                selected.push_back(map_id);
+            }
+        }
+        return selected;
+    }
+};
+
 struct ImportParam
 {
     // 由 DetectGameRegion 填入, 不接受 attach 覆盖
@@ -59,7 +132,10 @@ struct ImportParam
     int width = kDefaultWindowWidth;
     int height = kDefaultWindowHeight;
     bool clear_login = false;
+    // 可选: 用该 UID 的 WebView2 独立 profile 打开, 复用它上次保存的登录态
+    std::string uid;
     std::vector<std::string> template_ids;
+    AreaSelection areas;
 };
 
 struct CapturedResponse
@@ -110,6 +186,23 @@ ImportParam LoadParam(MaaContext* context, const char* node_name)
 
     const auto& attach = obj.at("attach").as_object();
     out.clear_login = attach.get("clear_login", out.clear_login);
+    out.uid = attach.get("uid", out.uid);
+    for (const auto& [key, value] : attach) {
+        if (key.rfind("include_map", 0) != 0) {
+            continue;
+        }
+        out.areas.explicit_filter = true;
+        if (!value.is_boolean() || !value.as_boolean()) {
+            continue;
+        }
+        const std::string area = key.substr(std::strlen("include_"));
+        if (area.find("_lv") != std::string::npos) {
+            out.areas.levels.insert(area);
+        }
+        else {
+            out.areas.maps.insert(area);
+        }
+    }
     return out;
 }
 
@@ -132,6 +225,43 @@ std::string QueryValue(const std::string& url, const std::string& key)
     }
     return {};
 }
+
+#ifdef _WIN32
+// 日志里只保留首尾各 3 位
+std::string MaskUid(const std::string& uid)
+{
+    if (uid.size() <= 6u) {
+        return std::string(uid.size(), '*');
+    }
+    return uid.substr(0, 3) + std::string(uid.size() - 6, '*') + uid.substr(uid.size() - 3);
+}
+
+// 不勾选「导入另一个账号」时走默认 profile; 成功抓到账号后把这份站点数据复制到
+// debug/record/<roleId>, 以后勾选同一 UID 就能直接复用. 复制失败不影响本次导入.
+void SaveProfileSnapshot(const std::filesystem::path& source, const std::filesystem::path& target, const std::string& role_id)
+{
+    if (source.empty() || target.empty()) {
+        return;
+    }
+    std::error_code ec;
+    if (!std::filesystem::exists(source) || std::filesystem::exists(target)) {
+        return;
+    }
+    std::filesystem::create_directories(target.parent_path(), ec);
+    if (ec) {
+        LogWarn << "ZiplineImport: create snapshot dir failed" << VAR(ec.message());
+        return;
+    }
+    std::filesystem::copy(source, target, std::filesystem::copy_options::recursive, ec);
+    if (ec) {
+        LogWarn << "ZiplineImport: save the default profile failed" << VAR(MaskUid(role_id)) << VAR(ec.message());
+        std::error_code cleanup_ec;
+        std::filesystem::remove_all(target, cleanup_ec);
+        return;
+    }
+    LogInfo << "ZiplineImport: saved the default profile for reuse" << VAR(MaskUid(role_id));
+}
+#endif
 
 // roleId/serverId 只能在内存里参与账号匹配, 写日志前必须打码
 std::string RedactAccountQuery(std::string url)
@@ -220,7 +350,10 @@ struct PersistResult
     std::string role_id; // 本次原始 roleId, 仅供提示, 不落盘
 };
 
-PersistResult PersistCaptured(const std::vector<CapturedResponse>& captured, const std::vector<std::string>& template_ids)
+PersistResult PersistCaptured(
+    const std::vector<CapturedResponse>& captured,
+    const std::vector<std::string>& template_ids,
+    const AreaSelection& areas)
 {
     PersistResult result;
     const std::filesystem::path path = ZiplineStore::DefaultPath();
@@ -272,6 +405,10 @@ PersistResult PersistCaptured(const std::vector<CapturedResponse>& captured, con
 
     size_t total = 0;
     for (auto& [map_id, marks] : by_map) {
+        if (!areas.IncludesMap(map_id)) {
+            continue;
+        }
+
         auto key = [](const ZiplineMark& m) {
             return std::tie(m.template_id, m.level_id, m.x, m.y, m.z);
         };
@@ -279,24 +416,64 @@ PersistResult PersistCaptured(const std::vector<CapturedResponse>& captured, con
         marks.erase(
             std::unique(marks.begin(), marks.end(), [&key](const ZiplineMark& a, const ZiplineMark& b) { return key(a) == key(b); }),
             marks.end());
+        if (marks.empty()) {
+            continue;
+        }
+
+        std::vector<ZiplineMark> updated;
+        if (!areas.FullyIncludesMap(map_id)) {
+            const auto levels = areas.LevelsForMap(map_id);
+            updated.reserve(marks.size());
+            for (const ZiplineMark& mark : marks) {
+                if (levels.count(mark.level_id) != 0) {
+                    updated.push_back(mark);
+                }
+            }
+            if (updated.empty()) {
+                LogWarn << "ZiplineImport: selected subregions have no marks in the captured response" << VAR(map_id);
+                continue;
+            }
+            store.mergeLevels(*account_id, role_id, map_id, levels, updated, CurrentTimestamp());
+        }
+        else {
+            updated = marks;
+            ZiplineMapRecord record;
+            record.account_id = *account_id;
+            // 原始 roleId 只作展示字段, 账号匹配仍用 account_id
+            record.uid = role_id;
+            record.map_id = map_id;
+            record.fetched_at = CurrentTimestamp();
+            record.marks = updated;
+            store.replaceMap(std::move(record));
+        }
 
         std::unordered_map<std::string, size_t> by_template;
-        for (const auto& mark : marks) {
+        for (const auto& mark : updated) {
             ++by_template[mark.template_id];
         }
         for (const auto& [template_id, count] : by_template) {
             LogInfo << "ZiplineImport: template" << VAR(map_id) << VAR(template_id) << VAR(count);
         }
 
-        LogInfo << "ZiplineImport: captured map" << VAR(map_id) << VAR(marks.size());
-        total += marks.size();
+        LogInfo << "ZiplineImport: captured map" << VAR(map_id) << VAR(updated.size());
+        total += updated.size();
+    }
 
-        ZiplineMapRecord record;
-        record.account_id = *account_id;
-        record.map_id = map_id;
-        record.fetched_at = CurrentTimestamp();
-        record.marks = std::move(marks);
-        store.replaceMap(std::move(record));
+    for (const std::string& level : areas.levels) {
+        const std::string map_id = AreaSelection::MapOfLevel(level);
+        if (map_id.empty() || areas.FullyIncludesMap(map_id)) {
+            continue;
+        }
+        bool level_captured = false;
+        const auto found = by_map.find(map_id);
+        if (found != by_map.end()) {
+            level_captured = std::any_of(found->second.begin(), found->second.end(), [&level](const ZiplineMark& mark) {
+                return mark.level_id == level;
+            });
+        }
+        if (!level_captured) {
+            LogWarn << "ZiplineImport: selected subregion was not captured" << VAR(level);
+        }
     }
 
     if (total == 0) {
@@ -459,6 +636,10 @@ MaaBool MAA_CALL ZiplineImportActionRun(
     }
 
     ImportParam param = LoadParam(context, node_name);
+    if (!param.uid.empty() && !IsValidRawUid(param.uid)) {
+        LogError << "ZiplineImport: uid must be 8-12 digits" << VAR(param.uid.size());
+        return false;
+    }
     switch (gamesetting::DetectGameRegion(MaaTaskerGetController(MaaContextGetTasker(context)))) {
     case gamesetting::Region::CN:
         param.url = kMapUrlCN;
@@ -490,11 +671,23 @@ MaaBool MAA_CALL ZiplineImportActionRun(
     webview->SetSize(param.width, param.height);
     webview->SetURL(param.url);
     webview->SetClearWebData(param.clear_login);
+    bool saved_session = false;
+#ifdef _WIN32
+    if (!param.uid.empty()) {
+        // 勾选清空登录态时会先删数据, 这次不能算命中
+        saved_session = !param.clear_login && std::filesystem::exists(WebView2::UserDataFolder(param.uid));
+        webview->SetAccountKey(param.uid);
+        LogInfo << "ZiplineImport: using account profile" << VAR(MaskUid(param.uid)) << VAR(saved_session) << VAR(param.clear_login);
+    }
+#endif
     if (!webview->Open()) {
         LogError << "ZiplineImport: webview open failed" << VAR(param.url);
         return false;
     }
-    common::notice::Publish(context, common::notice::Text("zipline.import_sign_in_hint"));
+    // 已命中保存的登录态时不再提示登录
+    if (!saved_session) {
+        common::notice::Publish(context, common::notice::Text("zipline.import_sign_in_hint"));
+    }
 
     auto state = std::make_shared<SniffState>();
     SubscribeSniffers(webview, state, param.mark_list_path);
@@ -521,7 +714,13 @@ MaaBool MAA_CALL ZiplineImportActionRun(
 
     ZiplineFrames frames;
     frames.load(ZiplineFrames::DefaultPath());
-    const std::vector<std::string> expected = frames.mapIds();
+    const std::vector<std::string> all_expected = frames.mapIds();
+    const std::vector<std::string> expected = param.areas.SelectedMaps(all_expected);
+    if (expected.empty()) {
+        LogError << "ZiplineImport: no map or level selected";
+        webview->Close();
+        return false;
+    }
 
     std::vector<CapturedResponse> captured;
     std::unordered_set<std::string> covered;
@@ -629,8 +828,23 @@ MaaBool MAA_CALL ZiplineImportActionRun(
         return false;
     }
 
-    const PersistResult persisted = PersistCaptured(captured, param.template_ids);
+    const PersistResult persisted = PersistCaptured(captured, param.template_ids, param.areas);
     LogInfo << "ZiplineImport: done" << VAR(captured.size()) << VAR(persisted.total);
+#ifdef _WIN32
+    // 输入的 UID 只用来选保存的登录态; 数据归属始终以网页实际 roleId 为准.
+    // 新号第一次导入时两者可能不同, 不阻断也不改目录, 下次按实际 UID 另存即可.
+    if (persisted.total > 0 && !param.uid.empty() && !persisted.role_id.empty() && persisted.role_id != param.uid) {
+        LogInfo << "ZiplineImport: captured account differs from the entered uid, using the captured one"
+                << VAR(MaskUid(param.uid)) << VAR(MaskUid(persisted.role_id));
+    }
+    // 不勾选时走默认 profile; 成功后按实际 roleId 留一份快照, 供以后勾选 UID 时免登录
+    if (persisted.total > 0 && param.uid.empty() && !persisted.role_id.empty()) {
+        SaveProfileSnapshot(
+            WebView2::UserDataFolder(std::string {}),
+            WebView2::UserDataFolder(persisted.role_id),
+            persisted.role_id);
+    }
+#endif
     if (persisted.total > 0) {
         common::notice::Publish(
             context,
