@@ -485,11 +485,25 @@ export const destinations = assertArray(catalogSource.destinations, "delivery_de
             buildLocatorZoneId(depot.map, `终点 ${id}`),
             `终点重试 ${id}`,
         );
-        // departurePath 会拼接到终点主路线之前，首点 ZONE 由 withZoneDeclaration 统一归一化。
+        // departurePath 只服务"步行离场"：滑索变体不拼它，否则会先被 required 的离场点拽到塔的
+        // 另一侧，再折回上索站位。滑索变体按终点的自动/保存路线正常走到上索起点即可，离场段里的
+        // 跳板一类动作只对步行离场有意义，不需要为它特判。
         const path = withZoneDeclaration(
             withInteractTail(
                 [
                     ...depot.departurePath,
+                    ...ownPath,
+                ],
+                interact,
+                `终点 ${id}`,
+                interactTarget,
+            ),
+            buildLocatorZoneId(depot.map, `终点 ${id}`),
+            `终点 ${id}`,
+        );
+        const zipPath = withZoneDeclaration(
+            withInteractTail(
+                [
                     ...ownPath,
                 ],
                 interact,
@@ -517,6 +531,7 @@ export const destinations = assertArray(catalogSource.destinations, "delivery_de
                 source.v,
             ],
             path,
+            zipPath,
             retryPath,
             walkOnly,
             ziplineOnly,
