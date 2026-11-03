@@ -17,7 +17,7 @@ pnpm generate:AutoDelivery
 
 完整送货业务调用方仍只进入 `AutoDelivery`。生成的 `AutoDeliveryRoute...` 节点是公开的单路线测试入口，可在节点测试工具中单独运行；正常流程由 Go Service 识别当前仓储/终点后，通过固定 `SubTask` 分发节点动态调用。
 
-运行生成命令时，`sync-routes.mjs` 会按 `source_id` 刷新仓储的 `name` 以及终点的 `name` / `depot_id`，为游戏数据中的新增项补充 metadata-only 条目，并保留已有的人工字段。仓储和终点都支持 `description` / `path` / `retry_path` / `yaw` / `offset` / `walk_only` / `zipline_only`；`departure_path` 仅用于仓储，并会拼接到该仓储所有终点主路线之前。所有仓储和送货目标默认还会用自动两点接近路线生成 retry 节点，显式 `retry_path` 可覆盖其站位修正路径。
+运行生成命令时，`sync-routes.mjs` 会按 `source_id` 刷新仓储的 `name` 以及终点的 `name` / `depot_id`，为游戏数据中的新增项补充 metadata-only 条目，并保留已有的人工字段。仓储和终点都支持 `description` / `path` / `retry_path` / `yaw` / `offset` / `walk_only` / `zipline_only`；`departure_path` 仅用于仓储，只会拼接到该仓储各终点主路线的**步行变体**之前，`...WithZipline` 变体不拼——离场段只为步行离场服务，滑索变体按终点路线正常走到上索起点即可（离场段里的跳板、交互等动作不需要），否则会先走到离场点再折回上索站位。所有仓储和送货目标默认还会用自动两点接近路线生成 retry 节点，显式 `retry_path` 可覆盖其站位修正路径。
 
 部分收货 NPC 实际朝向墙体，或数据源缺失朝向（`yaw` 缺省为 0），此时自动接近点会落进不可达处，retry 站位修正必然失败。这类情况只需在对应条目上写 `yaw` 覆盖生成接近点使用的朝向，不必整条重写 `retry_path`。取值与数据源 `yaw` 同义：接近点在实体该朝向的正方向 8 米处，0 度指向底图上方，数值增大顺时针旋转（90 度向右、180 度向下、270 度向左）。仓储的 `yaw` 同时作用于主路线接近点与自动重试路线；终点的 `yaw` 作用于回收站主路线接近点与自动重试路线，NPC 主路线仍只生成原始坐标的单个 `NAVMESH` 点，因此只影响其 retry 路线。条目同时覆盖 `path` 与 `retry_path` 时 `yaw` 没有作用对象，生成器会直接报错。
 

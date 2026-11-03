@@ -121,7 +121,7 @@ The override file only has the top-level `depots` and `destinations`:
 | --- | --- | --- |
 | `depots` | `path` | Full MapNavigator route from the quick teleport landing point to the depot; when not configured, the automatically generated depot coordinates are used |
 | `depots` | `retry_path` | Overrides the automatic two-point position-correction route run when the pickup button is still not recognized after the circle search |
-| `depots` | `departure_path` | Shared departure route prepended to the routes of the destinations that belong to this depot |
+| `depots` | `departure_path` | Shared departure route prepended to the **walking variant** of the destinations that belong to this depot; the `...WithZipline` variant does not prepend it — the departure leg only serves walking out of the depot, while the zipline variant simply follows the destination route to the mount point (special actions such as `JUMP_PAD` in the departure leg are not needed), otherwise the agent would walk to the departure point and then back to the mount spot |
 | `depots` | `yaw` | Overrides the facing angle used by the main route's approach point and the automatic retry route; use it when the depot faces a wall |
 | `depots` | `offset` | Fine-tunes the automatically generated depot navigation landing point (base map pixel offset) |
 | `depots` | `walk_only` / `zipline_only` | Overrides the zipline policy of this depot's main route, see below; the two are mutually exclusive |
