@@ -80,7 +80,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       # Agent 按 MaaUtils 子模块编译，必须与运行时加载的 MaaFramework 同版。
+      # fork 预览专用：同 install.yml，fork 上不以子模块版本拦截 C++ 编译；回上游前删除本条件。
       - name: Check MaaUtils matches MaaFramework
+        if: github.repository_owner == 'MaaEnd'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MAAFW_VERSION: ${{ steps.maafw.outputs.release }}

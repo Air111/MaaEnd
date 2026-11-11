@@ -132,8 +132,12 @@ jobs:
           permission-contents: read
           permission-actions: write
 
+      # fork 预览专用：MaaUtils 锁版本校验只在官方仓库生效。
+      # fork 上的产物只用于真机验证，无论 origin/v2 与子模块有没有跟上最新 MaaFramework，
+      # 都不能在这一步拒绝构建；回上游前删除本条件。
       - id: maautils-sync-check
         name: Check MaaUtils submodule matches MaaFramework release
+        if: github.repository_owner == 'MaaEnd'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APP_TOKEN: ${{ steps.maautils-app-token.outputs.token }}
