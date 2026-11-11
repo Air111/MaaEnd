@@ -26,6 +26,9 @@ concurrency:
 
 jobs:
   check-submodule:
+    # fork 预览专用：命名校验只在官方仓库生效；fork 上子模块指针跟随 v2 变化不再报错。
+    # 回上游前删除本条件。
+    if: github.repository_owner == 'MaaEnd'
     runs-on: ubuntu-latest
     env:
       EVENT_NAME: ${{ github.event_name }}
