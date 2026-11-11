@@ -1053,6 +1053,44 @@ LegLookup first_leg(
     return lookup;
 }
 
+// 返回这段路折算后的长度
+double straighten_reversed_leg(navmesh::WorldPath* path, double planned_length, const char* side)
+{
+    if (path->points.size() < 2) {
+        return planned_length;
+    }
+    // 下面的赋值会换掉 points 自己, 所以这三个点按值取
+    const navmesh::WorldPoint start = path->points.front();
+    const navmesh::WorldPoint goal = path->points.back();
+    const navmesh::WorldPoint next = path->points[1];
+    const double step_x = next.x - start.x;
+    const double step_y = next.y - start.y;
+    const double goal_x = goal.x - start.x;
+    const double goal_y = goal.y - start.y;
+    const double step_length = std::hypot(step_x, step_y);
+    const double goal_length = std::hypot(goal_x, goal_y);
+    // 起点已经在终点上, 或第一步正好落在终点上, 都没有方向可比
+    if (step_length <= 0.0 || goal_length <= 0.0) {
+        return planned_length;
+    }
+    // ±90° 以内算正常绕行, 再偏就是朝着目的地以外走
+    if (step_x * goal_x + step_y * goal_y >= 0.0) {
+        return planned_length;
+    }
+
+    LogWarn << "ZiplineRoute: the saved leg walks away from its goal, going straight instead." << VAR(side) << VAR(start.x)
+            << VAR(start.y) << VAR(next.x) << VAR(next.y) << VAR(goal.x) << VAR(goal.y) << VAR(planned_length) << VAR(goal_length);
+    path->points = { start, goal };
+    // 逐点数据都是按原来的点算的, 换成直线后必须一起丢掉, 否则高度和落点会对不上
+    path->clearance.clear();
+    path->heights.clear();
+    path->waypoints.clear();
+    path->segment_breaks.clear();
+    path->drops.clear();
+    path->ropes.clear();
+    return goal_length;
+}
+
 // 手工路径只认 (区, 终点) 与账号, 起点由本次实际位置决定
 std::optional<ZiplineRoute> plan_edited_path(
     const PlanInputs& in,
@@ -1131,12 +1169,16 @@ std::optional<ZiplineRoute> plan_edited_path(
         .approach = approach->path,
         .departure = departure->path,
     };
+    // 保存的路径是用户的明确选择, 不跟步行比成本, 但一段路第一步就朝目的地反方向时它就是绕远,
+    // 改成直奔终点的直线 (允许跨高度), 免得下索后先往反方向走再绕回来
+    const double approach_length = straighten_reversed_leg(&route.approach, approach->length, "approach");
+    const double departure_length = straighten_reversed_leg(&route.departure, departure->length, "departure");
     double zip_cost = in.cost.mount_penalty - in.cost.transfer_penalty;
     for (size_t hop = 0; hop + 1 < chain.size(); ++hop) {
         zip_cost += planar_distance(to_world(nodes[chain[hop]]), to_world(nodes[chain[hop + 1]])) * in.cost.speed_ratio
                     + in.cost.transfer_penalty;
     }
-    route.cost = approach->length + zip_cost + departure->length;
+    route.cost = approach_length + zip_cost + departure_length;
     for (const size_t index : chain) {
         route.towers.push_back(nodes[index]);
     }
@@ -1382,6 +1424,10 @@ std::optional<ZiplineRoute> PlanZiplineRoute(ZiplineOutcome* outcome, const Navi
                 << VAR(request.goal.y) << VAR(match_goal_x) << VAR(match_goal_y) << VAR(saved_route->label)
                 << VAR(saved_route->towers.size());
     }
+    else if (request.saved_route_only) {
+        // 只认保存的路径, 这里不必再搜: 搜出来的自动方案没跟步行比过成本, 不能直接顶替作者路线
+        return std::nullopt;
+    }
 
     // 手工路径是用户的明确选择, 不再按步行成本否决, 只在走不通时回退
     if (walking_baseline_available && saved_route == nullptr && gain_threshold <= cost.mount_penalty) {
@@ -1445,6 +1491,11 @@ std::optional<ZiplineRoute> PlanZiplineRoute(ZiplineOutcome* outcome, const Navi
         if (std::optional<ZiplineRoute> edited = plan_edited_path(in, sites, graph, *saved_route)) {
             g_outcome.used = true;
             return edited;
+        }
+        if (request.saved_route_only) {
+            LogWarn << "ZiplineRoute: the edited path does not fit this leg, expanding the walk instead."
+                    << VAR(request.navmesh_zone) << VAR(request.goal.x) << VAR(request.goal.y);
+            return std::nullopt;
         }
         LogWarn << "ZiplineRoute: the edited path does not fit this leg, searching instead." << VAR(request.navmesh_zone)
                 << VAR(request.goal.x) << VAR(request.goal.y);

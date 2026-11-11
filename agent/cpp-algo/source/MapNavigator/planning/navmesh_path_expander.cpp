@@ -821,13 +821,15 @@ void append_departure(
     }
 }
 
-// walking_path 非空时滑索只在严格更省时顶替走路, 为空时用来桥接步行不连通的两侧
+// walking_path 非空时滑索只在严格更省时顶替走路, 为空时用来桥接步行不连通的两侧;
+// saved_route_only 见 ZiplineLegRequest 的同名字段
 bool try_append_zipline_leg(
     ExpansionContext* ctx,
     LegState* state,
     std::vector<Waypoint>* out_path,
     const ProjectedTarget& target,
-    const navmesh::WorldPath* walking_path)
+    const navmesh::WorldPath* walking_path,
+    bool saved_route_only = false)
 {
     auto route = PlanZiplineRoute(
         ctx->zipline_outcome,
@@ -846,6 +848,7 @@ bool try_append_zipline_leg(
             .maa_context = ctx->maa_context,
             .capture_diagnostics = ctx->diagnostics != nullptr,
             .no_go = ctx->no_go,
+            .saved_route_only = saved_route_only,
         });
     if (!route || route->approach.points.empty() || route->departure.points.empty() || route->towers.size() < 2) {
         return false;
@@ -1133,6 +1136,51 @@ bool rides_zipline(const std::vector<Waypoint>& out_path, size_t output_begin)
     });
 }
 
+// 段尾 target 之后的动作点照常追加, 被替换掉走路时这一段也不能丢
+bool append_span_tail(ExpansionContext* ctx, LegState* state, std::vector<Waypoint>* out_path, size_t target_index, size_t end)
+{
+    const std::vector<Waypoint>& path = ctx->param->path;
+    for (size_t index = target_index; index < end; ++index) {
+        if (index == target_index && IsMovementPoint(path[index])) {
+            continue;
+        }
+        if (!append_stamped_authored_waypoint(ctx, state, out_path, index)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// 保存的滑索路径只按 (区, 终点) 命中, 命中后上下索两段都由它定, 不必先把整段走路规划出来当基线;
+// 没命中或走不通时返回 false, 由调用方照作者路线照常展开
+bool append_saved_zipline_span(
+    ExpansionContext* ctx,
+    LegState* state,
+    std::vector<Waypoint>* out_path,
+    size_t begin,
+    size_t end,
+    size_t target_index)
+{
+    if (cancel_if_stopped(ctx, *state)) {
+        return false;
+    }
+    // 没有走路基线, 叠层处只能按坐标本身落层
+    const ProjectedTarget target = resolve_projected_target(ctx->mesh->pack, ctx->param->path[target_index]);
+    const size_t output_begin = out_path->size();
+    LegState shortcut_state = *state;
+    std::vector<Waypoint> shortcut;
+    if (!try_append_zipline_leg(ctx, &shortcut_state, &shortcut, target, nullptr, true)) {
+        return false;
+    }
+
+    out_path->insert(out_path->end(), std::make_move_iterator(shortcut.begin()), std::make_move_iterator(shortcut.end()));
+    stamp_authored_group(out_path, output_begin, begin);
+    *state = shortcut_state;
+    LogInfo << "Zipline planned the saved path on its own, the walk was never expanded." << VAR(begin) << VAR(end)
+            << VAR(target_index) << VAR(out_path->size() - output_begin);
+    return append_span_tail(ctx, state, out_path, target_index, end);
+}
+
 // 先照作者路线展开当基线, 滑索比基线省够了才把这段走路整段换掉, 段尾的动作照常保留
 bool append_replaceable_span(ExpansionContext* ctx, LegState* state, std::vector<Waypoint>* out_path, size_t begin, size_t end)
 {
@@ -1140,6 +1188,16 @@ bool append_replaceable_span(ExpansionContext* ctx, LegState* state, std::vector
     const LegState span_start = *state;
     const size_t output_begin = out_path->size();
     const size_t diagnostics_begin = ctx->diagnostics == nullptr ? 0 : ctx->diagnostics->size();
+    const std::optional<size_t> target_index = last_positioned_index(path, begin, end);
+    // 段里一个走路点都没有时这一段本来就没有走路可省, 不该拿滑索去顶
+    const bool walking_span = std::any_of(path.begin() + static_cast<std::ptrdiff_t>(begin),
+                                          path.begin() + static_cast<std::ptrdiff_t>(end),
+                                          [](const Waypoint& waypoint) { return IsMovementPoint(waypoint); });
+    // 保存的滑索路径已经把上下索两段定死了, 先只规划这两段; 仓储前那十几秒一半是白展开的走路基线
+    if (walking_span && target_index && append_saved_zipline_span(ctx, state, out_path, begin, end, *target_index)) {
+        return true;
+    }
+
     for (size_t index = begin; index < end; ++index) {
         if (cancel_if_stopped(ctx, *state)) {
             return false;
@@ -1149,9 +1207,8 @@ bool append_replaceable_span(ExpansionContext* ctx, LegState* state, std::vector
         }
     }
 
-    const std::optional<size_t> target_index = last_positioned_index(path, begin, end);
     // 基线里已有的滑索是步行不通时的桥, 不再拿别的滑索去比
-    if (!target_index || rides_zipline(*out_path, output_begin)) {
+    if (!walking_span || !target_index || rides_zipline(*out_path, output_begin)) {
         return true;
     }
 
@@ -1182,15 +1239,7 @@ bool append_replaceable_span(ExpansionContext* ctx, LegState* state, std::vector
             first + static_cast<std::ptrdiff_t>(diagnostics_end));
     }
     LogInfo << "Zipline replaced the walking of an authored span." << VAR(begin) << VAR(end) << VAR_AS(target_index, *target_index);
-    for (size_t index = *target_index; index < end; ++index) {
-        if (index == *target_index && IsMovementPoint(path[index])) {
-            continue;
-        }
-        if (!append_stamped_authored_waypoint(ctx, state, out_path, index)) {
-            return false;
-        }
-    }
-    return true;
+    return append_span_tail(ctx, state, out_path, *target_index, end);
 }
 
 void append_zone_declaration(LegState* state, std::vector<Waypoint>* out_path, const Waypoint& waypoint)
