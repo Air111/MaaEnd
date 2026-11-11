@@ -183,6 +183,10 @@ A3 **不要求 IMS 缓存已经存在**。
 
 有缓存时同样输出一条汇总；不叠 Pipeline Starting/Succeeded focus。
 
+### 全局关闭
+
+「设置 → 任务设置 → 物品统计 → 奖励弹窗物品统计（IMS）」可全局关掉 A3：`assets/tasks/setting/ItemStats.json` 用 `global_option` 把 12 个 A3 调用点（两个公共奖励节点、`AddItemDataOnRewards`，以及各任务自己写死的 A3 节点）的 `action` 覆盖成 `DoNothing`，只跳过识别与汇总，点击流程不变。默认开启。
+
 > 奖励弹出入场动画期间，调用前应对物品区域使用 `pre_wait_freezes`（协议空间见 `ProtocolSpaceRewardAddItemData`）。
 >
 > 参考 Pipeline：`AddItemDataOnRewards` → `AddItemDataCloseRewards`。
