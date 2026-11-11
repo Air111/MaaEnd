@@ -332,8 +332,11 @@ constexpr int32_t kZiplineAimFailBanCount = 2;
 // 一趟导航弃索达到这么多次后不再让滑索参与规划
 constexpr int32_t kZiplineAbandonWalkFallbackCount = 3;
 
+// 上索到点判定圈. 圈以站位为圆心、站位在塔心外 0.75, 所以一进圈就停时离塔心 = 0.75 + R;
+// 实测提示要在离塔心 1.1~1.2 才出现, R 必须小到 0.4 才能落进提示范围
+constexpr double kZiplineMountArriveBandWu = 0.4;
 // 按了一次没认出设备后收紧到的判定圈
-constexpr double kZiplineRestandBandWu = 1.0;
+constexpr double kZiplineRestandBandWu = 0.2;
 // 顶着设备走不动这么久就换站位, 须早于恢复阶梯触发
 constexpr int32_t kZiplineMountSpotStallMs = 2000;
 static_assert(kZiplineMountSpotStallMs < kObstacleRecoveryMinTriggerMs);
