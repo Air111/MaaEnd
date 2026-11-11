@@ -297,6 +297,7 @@
         "tasks/preset/IndependentTasks.json",
         // setting
         "tasks/setting/Keymap.json",
-        "tasks/setting/Zipline.json"
+        "tasks/setting/Zipline.json",
+        "tasks/setting/ItemStats.json"
     ]
 }
