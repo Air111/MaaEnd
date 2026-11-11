@@ -323,8 +323,9 @@ double ResolveArrivalDistance(const Navigator& nav, const NavigateTick& tick)
     }
     if (waypoint.action == ActionType::ZIPLINE && !IsZiplineMounted(nav.runtime_state)
         && HardStalledMs(*nav.session, tick.now) <= kCollectArrivalRelaxMs) {
-        arrival_distance = std::min(arrival_distance, kCollectArrivalBandWu);
+        arrival_distance = std::min(arrival_distance, kZiplineMountArriveBandWu);
         if (nav.runtime_state.zipline_approach.press_missed) {
+            // 已经按过一次没认出, 只收紧不放松
             arrival_distance = std::min(arrival_distance, kZiplineRestandBandWu);
         }
     }
