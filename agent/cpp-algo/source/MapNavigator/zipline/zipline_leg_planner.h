@@ -67,6 +67,9 @@ struct ZiplineLegRequest
     bool capture_diagnostics = false;
     // 上下索两段步行与作者路线避开同一批禁区
     const std::vector<VirtualNoGoDisc>* no_go = nullptr;
+    // 只认保存的手工路径; 没命中或走不通就放弃本次, 不去搜自动方案.
+    // 调用方据此在不展开整段走路的前提下先试一次, 失败再照作者路线展开
+    bool saved_route_only = false;
 };
 
 std::optional<ZiplineRoute> PlanZiplineRoute(ZiplineOutcome* outcome, const NaviParam& param, const ZiplineLegRequest& request);
