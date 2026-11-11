@@ -413,7 +413,7 @@
                             },
                             "zipline_match_goal": {
                                 "type": "array",
-                                "items": { "type": "number" },
+                                "items": {"type": "number"},
                                 "minItems": 2,
                                 "maxItems": 2,
                                 "description": "手工滑索链的匹配终点；缺省用 path 的终点"
