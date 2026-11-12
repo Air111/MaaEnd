@@ -133,6 +133,9 @@ type BetterSlidingAction struct {
 	// preciseClickBase 精确点击基准坐标；preciseClickNudges 为已偏移次数，仅作日志索引。
 	preciseClickBase   [2]int
 	preciseClickNudges int
+	// lastNudgeSign 记录最近一次滑条偏移方向（+1 more / -1 less）。
+	// 越过目标后方向会翻转，继续偏移会来回震荡，因此只在方向不变时允许再次偏移。
+	lastNudgeSign int
 	// preciseClickRecalibrated 表示本轮已按实测数量校准过一次精确点击，见 recalibratePreciseClick
 	// preciseClickPendingCheck 表示下一次复查读的是精确点击刚落下后的数量（中间没按过加减）；
 	// staleRecheckUsed 表示已为疑似未刷新的读数重读过一次
@@ -168,6 +171,10 @@ func (b buttonTarget) logValue() any {
 }
 
 const maxClickRepeat = 30
+
+// maxSliderNudges 是超出容错后改用滑条 1px 偏移逼近目标的最大次数。
+// 偏移一次约等于一个滑条步长；几次后仍进不了容错带说明步长过粗，应退回按钮微调。
+const maxSliderNudges = 4
 
 // maxFineTuneThreshold 是 FineTuneQuantity 整数阈值的饱和边界。
 //

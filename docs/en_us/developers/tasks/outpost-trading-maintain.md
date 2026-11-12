@@ -1,7 +1,7 @@
 # Developer Manual - OutpostTrading
 
 `OutpostTrading` automatically sells products at the regions/outposts selected by the user. The task follows "Pipeline owns flow, Go owns algorithms": Pipeline (`assets/resource/pipeline/OutpostTrading*.json`) handles screen recognition and clicking; the Go service (`agent/go-service/outposttrading/`) owns selection strategy, reserve rules, operator planning, and caching.  
-This document was updated on October 23, 2026.
+This document was updated on November 12, 2026.
 
 ## At a Glance
 
@@ -95,7 +95,7 @@ The minimum unit price (task option `SellProductStockMinimumUnitPrice`, default 
 - Two modes: Keep Specified Quantity / Never Sell (internally quantity `-1`); quantity `0` means keep nothing; for duplicated items the later slot wins.
 - Activity items are sold in one batch against the activity quota, so reserve rules never apply to them and the slots list no activity items; priority selling options are unaffected.
 - "Keep Specified Quantity" uses BetterSliding `ReverseTarget` to sell only the excess; reaching the reserve in one trade, or stock already at/below the reserve, both `satisfy` the item for this task so later outposts skip it during selection.
-- Selling quantities use a ±100 tolerance (BetterSliding `QuantityTolerance: 100`): after dragging, a difference within 100 counts as done without ± fine-tuning; above 100, only the excess is added.
+- Selling quantity tolerance is `max(100, 1% of the target)` (BetterSliding `QuantityTolerance: 100` is the floor): a difference within it counts as done; a larger one first retries with a slider nudge, and only the remaining excess is covered by the ± buttons.
 - "Never Sell" excludes the item during selection recognition — no goods switching, never marked out of stock.
 
 ### Out of Stock

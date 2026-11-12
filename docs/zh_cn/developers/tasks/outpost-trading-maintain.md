@@ -1,7 +1,7 @@
 # 开发手册 - OutpostTrading 据点交易
 
 `OutpostTrading` 按用户配置的地区/据点自动完成据点交易。任务遵循「Pipeline 管流程，Go 管算法」：Pipeline（`assets/resource/pipeline/OutpostTrading*.json`）负责界面识别与点击；Go Service（`agent/go-service/outposttrading/`）负责选品策略、保留规则、干员规划与缓存。  
-该文档更新于 2026 年 10 月 23 日。
+该文档更新于 2026 年 11 月 12 日。
 
 ## 要点速览
 
@@ -95,7 +95,7 @@ OutpostTradingSellLoop（不限次数，每轮先查调度券）
 - 两种模式：保留指定数量 / 永不售卖（内部为数量 `-1`）；数量 `0` 等价于不保留；同一物品重复配置时后面的槽位覆盖前面的。
 - 活动物品按活动额度整批卖出，保留规则对其无效，因此槽位选项只列非活动物品；优先售卖选项不受影响。
 - 「保留指定数量」用 BetterSliding `ReverseTarget` 只卖超出部分；单次交易达到保留量、或库存本就不高于保留量，都会 `satisfy` 标记本次任务已满足，后续据点选品直接跳过。
-- 售卖数量带 ±100 容错（BetterSliding `QuantityTolerance: 100`）：拉条后差在 100 以内直接成交，不再点 ± 微调；超过 100 时只补足超出部分。
+- 售卖数量容错为 `max(100, 目标数量的 1%)`（BetterSliding `QuantityTolerance: 100` 作为下限）：差在容错内直接成交；超出时优先再用滑条偏移逼近，仍不行才用 ± 按钮补足超出部分。
 - 「永不售卖」在选品识别阶段排除，不切货品、不记缺货。
 
 ### 缺货

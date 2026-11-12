@@ -527,6 +527,8 @@ func (a *BetterSlidingAction) handleCheckQuantity(ctx *maa.Context, arg *maa.Cus
 		return a.recheckQuantity(ctx, arg, currentQuantity)
 	}
 
+	// 有效容错 = max(配置值, 目标数量的 1%)，配置值只作下限。
+	tolerance := a.quantityToleranceFor(a.TargetQuantity)
 	// 容错优先于重校准与按钮微调：差在容错范围内就视为达成，一下都不再点。
 	if a.withinQuantityTolerance(currentQuantity, a.TargetQuantity) {
 		if err := overrideCheckQuantityBranch(ctx, arg.CurrentTaskName, nodeBetterSlidingDone, buttonTarget{}, 0, nil); err != nil {
@@ -534,7 +536,8 @@ func (a *BetterSlidingAction) handleCheckQuantity(ctx *maa.Context, arg *maa.Cus
 				Err(err).
 				Int("current_quantity", currentQuantity).
 				Int("target_quantity", a.TargetQuantity).
-				Int("quantity_tolerance", a.QuantityTolerance)
+				Int("quantity_tolerance", tolerance).
+				Int("quantity_tolerance_base", a.QuantityTolerance)
 			if errors.Is(err, errCheckQuantityBranchNextOverride) {
 				logEvent.Msg("failed to override next to done within tolerance")
 			} else {
@@ -546,7 +549,8 @@ func (a *BetterSlidingAction) handleCheckQuantity(ctx *maa.Context, arg *maa.Cus
 		a.logger.Info().
 			Int("current_quantity", currentQuantity).
 			Int("target_quantity", a.TargetQuantity).
-			Int("quantity_tolerance", a.QuantityTolerance).
+			Int("quantity_tolerance", tolerance).
+			Int("quantity_tolerance_base", a.QuantityTolerance).
 			Str("next", nodeBetterSlidingDone).
 			Msg("quantity within tolerance")
 		return true
@@ -554,6 +558,13 @@ func (a *BetterSlidingAction) handleCheckQuantity(ctx *maa.Context, arg *maa.Cus
 
 	if justClicked && a.shouldRecalibratePreciseClick(currentQuantity) {
 		return a.recalibratePreciseClick(ctx, arg, currentQuantity)
+	}
+
+	// 超出容错时先尝试用滑条 1px 偏移把结果带进容错带（落点可在目标另一侧），
+	// 比逐下点击 ± 快得多；偏移用尽或步长过粗时才退回按钮。
+	if justClicked && a.shouldNudgeInto(currentQuantity) {
+		axis, endSign := resolveNudgeAxis(a.startBox, a.endBox, a.CenterPointOffset)
+		return a.nudgePreciseClick(ctx, arg, axis, endSign, a.nudgeDirection(currentQuantity), currentQuantity, nudgeReasonTolerance)
 	}
 
 	if !shouldFineTuneQuantity(a.FineTuneQuantity, currentQuantity, a.TargetQuantity) {
@@ -583,7 +594,7 @@ func (a *BetterSlidingAction) handleCheckQuantity(ctx *maa.Context, arg *maa.Cus
 		return true
 	case currentQuantity < a.TargetQuantity:
 		diff := a.TargetQuantity - currentQuantity
-		repeat := fineTuneRepeat(diff, a.QuantityTolerance)
+		repeat := fineTuneRepeat(diff, tolerance)
 		if err := overrideCheckQuantityBranch(ctx, arg.CurrentTaskName, nodeBetterSlidingIncreaseQuantity, a.IncreaseButton, repeat,
 			resolveButtonPlacement(a.startBox, a.Direction, true)); err != nil {
 			logEvent := a.logger.Error().
@@ -606,14 +617,15 @@ func (a *BetterSlidingAction) handleCheckQuantity(ctx *maa.Context, arg *maa.Cus
 			Int("target_quantity", a.TargetQuantity).
 			Int("diff", diff).
 			Int("repeat", repeat).
-			Int("quantity_tolerance", a.QuantityTolerance).
+			Int("quantity_tolerance", tolerance).
+			Int("quantity_tolerance_base", a.QuantityTolerance).
 			Interface("button", a.IncreaseButton.logValue()).
 			Str("next", nodeBetterSlidingIncreaseQuantity).
 			Msg("quantity below target, branch to increase")
 		return true
 	default:
 		diff := currentQuantity - a.TargetQuantity
-		repeat := fineTuneRepeat(diff, a.QuantityTolerance)
+		repeat := fineTuneRepeat(diff, tolerance)
 		if err := overrideCheckQuantityBranch(ctx, arg.CurrentTaskName, nodeBetterSlidingDecreaseQuantity, a.DecreaseButton, repeat,
 			resolveButtonPlacement(a.startBox, a.Direction, false)); err != nil {
 			logEvent := a.logger.Error().
@@ -636,7 +648,8 @@ func (a *BetterSlidingAction) handleCheckQuantity(ctx *maa.Context, arg *maa.Cus
 			Int("target_quantity", a.TargetQuantity).
 			Int("diff", diff).
 			Int("repeat", repeat).
-			Int("quantity_tolerance", a.QuantityTolerance).
+			Int("quantity_tolerance", tolerance).
+			Int("quantity_tolerance_base", a.QuantityTolerance).
 			Interface("button", a.DecreaseButton.logValue()).
 			Str("next", nodeBetterSlidingDecreaseQuantity).
 			Msg("quantity above target, branch to decrease")
@@ -676,7 +689,7 @@ func (a *BetterSlidingAction) handleNoFineTune(
 	}
 
 	if stepSign != 0 {
-		return a.nudgePreciseClick(ctx, arg, axis, endSign, stepSign, currentQuantity)
+		return a.nudgePreciseClick(ctx, arg, axis, endSign, stepSign, currentQuantity, nudgeReasonFineTuneFallback)
 	}
 
 	if err := overrideCheckQuantityBranch(
@@ -715,6 +728,12 @@ func (a *BetterSlidingAction) handleNoFineTune(
 	return true
 }
 
+// nudgePreciseClick 的调用来源，用于日志区分「不微调兜底」和「超出容错后的滑条重试」。
+const (
+	nudgeReasonFineTuneFallback = "fine_tune_fallback"
+	nudgeReasonTolerance        = "quantity_tolerance"
+)
+
 // nudgePreciseClick 用「精确点击基准坐标 + 单轴 1px 累加偏移」重写
 // BetterSlidingPreciseClick 的点击目标，并把它经 BetterSlidingReset2 接回复查一次：
 // 先把滑块复位到精确点击点的另一侧（精确点击本身落在滑块手柄上，会影响下一次点击），
@@ -729,8 +748,10 @@ func (a *BetterSlidingAction) nudgePreciseClick(
 	endSign int,
 	stepSign int,
 	currentQuantity int,
+	reason string,
 ) bool {
 	a.preciseClickNudges++
+	a.lastNudgeSign = stepSign
 	nudged := nudgedClickTarget(a.preciseClickBase, axis, endSign, stepSign, a.preciseClickNudges)
 
 	side := resolveReset2Side(axis, a.startBox, a.endBox, a.CenterPointOffset, a.preciseClickBase)
@@ -776,7 +797,13 @@ func (a *BetterSlidingAction) nudgePreciseClick(
 		return false
 	}
 
+	message := "fine-tuning skipped, reset2 and nudge precise click, then re-check"
+	if reason == nudgeReasonTolerance {
+		message = "quantity out of tolerance, retry with reset2 and nudge precise click, then re-check"
+	}
+
 	a.logger.Info().
+		Str("reason", reason).
 		Str("fine_tune_fallback", a.FineTuneFallback).
 		Str("axis", axis.String()).
 		Int("end_sign", endSign).
@@ -788,22 +815,26 @@ func (a *BetterSlidingAction) nudgePreciseClick(
 		Ints("nudged_target", []int{nudged[0], nudged[1]}).
 		Str("reset_side", side.String()).
 		Ints("reset_end", resetEnd).
-		Msg("fine-tuning skipped, reset2 and nudge precise click, then re-check")
+		Msg(message)
 	return true
 }
 
-// shouldRecalibratePreciseClick 判断精确点击后的读数是否偏得「超出容错后仍需超过一轮按钮微调」
+// shouldRecalibratePreciseClick 判断精确点击后的读数是否偏得「超出有效容错后仍需超过一轮按钮微调」
 // （maxClickRepeat）。容错为 0 时与旧行为一致：偏差超过一轮即重校准。
 // 终点识别偶尔会认错：移动端滑到最大时手柄变灰，禁用的「+」按钮反而更像手柄，
 // 按错误终点插值出的落点只靠 Increase/Decrease 的次数上限补不回来。每轮只校准一次
 func (a *BetterSlidingAction) shouldRecalibratePreciseClick(currentQuantity int) bool {
+	// 容错模式下已经用滑条偏移重试过时不要再重校准，否则会把偏移基准和次数重置掉。
+	if a.QuantityTolerance > 0 && a.preciseClickNudges > 0 {
+		return false
+	}
 	miss := absInt(currentQuantity - a.TargetQuantity)
 	return !a.preciseClickRecalibrated &&
 		a.preciseClickBase != [2]int{} &&
 		len(a.startBox) >= 4 &&
 		currentQuantity > 1 &&
 		a.TargetQuantity >= 1 &&
-		miss > a.QuantityTolerance+maxClickRepeat
+		miss > a.quantityToleranceFor(a.TargetQuantity)+maxClickRepeat
 }
 
 // recalibratePreciseClick 以「起点 = 数量 1、本次落点 = 实测数量」两点重新线性插值出目标点击位置，
@@ -826,6 +857,7 @@ func (a *BetterSlidingAction) recalibratePreciseClick(
 	a.preciseClickRecalibrated = true
 	a.preciseClickBase = target
 	a.preciseClickNudges = 0
+	a.lastNudgeSign = 0
 	a.preciseClickPendingCheck = true
 	a.staleRecheckUsed = false
 
@@ -935,10 +967,76 @@ func boxCenteredAt(center [2]int, like []int, offset [2]int) []int {
 	}
 }
 
-// withinQuantityTolerance 判断当前数量是否已落在 QuantityTolerance 容错范围内。
+// quantityToleranceFor 返回目标数量对应的有效容错：
+// 配置值是下限，另按目标数量的 1%（向上取整）放大；0 表示关闭容错。
+func (a *BetterSlidingAction) quantityToleranceFor(target int) int {
+	if a.QuantityTolerance <= 0 {
+		return 0
+	}
+	if percent := (target + 99) / 100; percent > a.QuantityTolerance {
+		return percent
+	}
+	return a.QuantityTolerance
+}
+
+// withinQuantityTolerance 判断当前数量是否已落在有效容错范围内。
 // 容错未配置（0）时恒为 false，数量必须精确等于目标才走 Done。
 func (a *BetterSlidingAction) withinQuantityTolerance(current int, target int) bool {
-	return a.QuantityTolerance > 0 && absInt(current-target) <= a.QuantityTolerance
+	tolerance := a.quantityToleranceFor(target)
+	return tolerance > 0 && absInt(current-target) <= tolerance
+}
+
+// nudgeDirection 返回把当前数量朝目标推动的 1px 偏移方向：+1 增大（more），-1 减小（less）。
+func (a *BetterSlidingAction) nudgeDirection(current int) int {
+	if current < a.TargetQuantity {
+		return 1
+	}
+	return -1
+}
+
+// sliderUnitsPerPixel 估算滑条上 1px 对应的数量步长。
+// 取 Start→End 中心点在移动轴上的跨度；几何缺失或跨度异常时返回 0（表示无法估算）。
+func (a *BetterSlidingAction) sliderUnitsPerPixel() int {
+	if len(a.startBox) < 4 || len(a.endBox) < 4 || a.sliderMaxQuantity <= 1 {
+		return 0
+	}
+	axis, _ := resolveNudgeAxis(a.startBox, a.endBox, a.CenterPointOffset)
+	startX, startY := centerPoint(a.startBox, a.CenterPointOffset)
+	endX, endY := centerPoint(a.endBox, a.CenterPointOffset)
+	span := endX - startX
+	if axis == nudgeAxisY {
+		span = endY - startY
+	}
+	span = absInt(span)
+	if span == 0 {
+		return 0
+	}
+	return (a.sliderMaxQuantity + span - 1) / span
+}
+
+// shouldNudgeInto 判断是否应改用滑条 1px 偏移把误差带进容错带。
+// 只有「偏移不会越过目标」或「越过目标后仍落在容错带内」时才尝试，避免越过后来回震荡；
+// 滑条步长过粗、偏移次数用尽或几何缺失时退回按钮微调。
+func (a *BetterSlidingAction) shouldNudgeInto(currentQuantity int) bool {
+	tolerance := a.quantityToleranceFor(a.TargetQuantity)
+	if tolerance <= 0 || a.preciseClickNudges >= maxSliderNudges || a.preciseClickBase == [2]int{} {
+		return false
+	}
+	miss := absInt(currentQuantity - a.TargetQuantity)
+	if miss <= tolerance {
+		return false
+	}
+	step := a.sliderUnitsPerPixel()
+	if step <= 0 {
+		return false
+	}
+	if a.preciseClickNudges > 0 && a.nudgeDirection(currentQuantity) != a.lastNudgeSign {
+		return false
+	}
+	if step < miss {
+		return true
+	}
+	return absInt(miss-step) <= tolerance
 }
 
 // fineTuneRepeat 把本轮 ± 点击次数限制为「超出容错范围的部分」，
@@ -1194,6 +1292,7 @@ func (a *BetterSlidingAction) resetState() {
 	a.endBox = nil
 	a.preciseClickBase = [2]int{}
 	a.preciseClickNudges = 0
+	a.lastNudgeSign = 0
 	a.preciseClickRecalibrated = false
 	a.preciseClickPendingCheck = false
 	a.staleRecheckUsed = false
