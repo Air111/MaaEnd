@@ -383,7 +383,7 @@ func (a *BetterSlidingAction) logParsedActionParams(controllerType string) {
 		Str("fine_tune_quantity_mode", a.FineTuneQuantity.modeLabel()).
 		Bool("fine_tune_quantity_enabled", a.FineTuneQuantity.enabled).
 		Int("fine_tune_quantity_threshold", a.FineTuneQuantity.threshold).
-		Int("quantity_tolerance", a.QuantityTolerance).
+		Int("quantity_tolerance_base", a.QuantityTolerance).
 		Str("fine_tune_fallback", a.FineTuneFallback).
 		Bool("reset_before_find_start", a.ResetBeforeFindStart).
 		Str("out_of_range_override_enable", a.OutOfRangeOverrideEnable).
@@ -393,7 +393,9 @@ func (a *BetterSlidingAction) logParsedActionParams(controllerType string) {
 		Bool("swipe_only_mode", a.SwipeOnlyMode)
 
 	if a.runtimeTargetResolved {
-		parseLog = parseLog.Int("runtime_target_quantity", a.TargetQuantity)
+		parseLog = parseLog.
+			Int("runtime_target_quantity", a.TargetQuantity).
+			Int("quantity_tolerance", a.quantityToleranceFor(a.TargetQuantity))
 	}
 
 	patches := []struct {
