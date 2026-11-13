@@ -1091,6 +1091,137 @@ double straighten_reversed_leg(navmesh::WorldPath* path, double planned_length, 
     return goal_length;
 }
 
+// 角色已经站在链上某根塔上时(纠错回程、E 多跳落到链上), 走完的那几跳不用再规划:
+// 走过的那几跳可能已经被运行记录封了索, 从链首重规划会把整条保存路径作废
+size_t snapped_chain_entry(const PlanInputs& in, const std::vector<zipline::ZiplineNode>& nodes, const std::vector<size_t>& chain)
+{
+    // 有塔面高度时用运行时同一套「站在这根塔上」的判定圈; 没有高度信息时只认几乎压在塔心上的点
+    const double snap_radius = in.request.start_deck_y ? kZiplineLandingBandWu : kZiplineTowerIdentityWu;
+    size_t entry = 0;
+    double nearest = snap_radius;
+    for (size_t index = 0; index < chain.size(); ++index) {
+        const zipline::ZiplineNode& tower = nodes[chain[index]];
+        if (in.request.start_deck_y && std::abs(*in.request.start_deck_y - tower.height) > kZiplineTowerIdentityWu) {
+            continue;
+        }
+        const double distance = std::hypot(tower.x - in.request.start.x, tower.y - in.request.start.y);
+        if (distance <= nearest) {
+            nearest = distance;
+            entry = index;
+        }
+    }
+    return entry;
+}
+
+// entry 是这次从保存路径的第几根塔开始乘, 前面那几跳按已经走完处理
+std::optional<ZiplineRoute> plan_edited_chain(
+    const PlanInputs& in,
+    const TowerSites& sites,
+    const ZipLinkGraph& graph,
+    const zipline::ZiplineSavedRoute& saved,
+    const std::vector<size_t>& chain,
+    size_t entry)
+{
+    const std::vector<zipline::ZiplineNode>& nodes = sites.nodes;
+    if (entry + 1 >= chain.size()) {
+        // 站在链尾, 没有还能乘的跳
+        LogWarn << "ZiplineRoute: the edited path has no hop left from where we stand." << VAR(entry) << VAR(chain.size())
+                << VAR(nodes[chain[entry]].x) << VAR(nodes[chain[entry]].y);
+        return std::nullopt;
+    }
+
+    for (size_t hop = entry; hop + 1 < chain.size(); ++hop) {
+        if (chain[hop] == chain[hop + 1]) {
+            LogWarn << "ZiplineRoute: the edited path visits the same tower twice in a row." << VAR(hop);
+            return std::nullopt;
+        }
+        // 失败过的跳两个方向都已从图里封掉, 这里只查边还在不在
+        const std::vector<size_t>& links = graph.all[chain[hop]];
+        if (std::find(links.begin(), links.end(), chain[hop + 1]) == links.end()) {
+            LogWarn << "ZiplineRoute: the edited path contains a hop the records cannot connect." << VAR(hop)
+                    << VAR(nodes[chain[hop]].x) << VAR(nodes[chain[hop]].y) << VAR(nodes[chain[hop + 1]].x)
+                    << VAR(nodes[chain[hop + 1]].y);
+            return std::nullopt;
+        }
+    }
+    if (sites.board_spots[chain[entry]].empty() || sites.land_spots[chain.back()].empty()) {
+        LogWarn << "ZiplineRoute: the edited path starts or ends on a tower unreachable from this leg."
+                << VAR(nodes[chain[entry]].x) << VAR(nodes[chain[entry]].y) << VAR(nodes[chain.back()].x)
+                << VAR(nodes[chain.back()].y);
+        return std::nullopt;
+    }
+
+    // 手工路径失败不占自动搜索的预算, 否则一条过期的编辑会让正常回退也搜不出东西
+    LegBudget budget;
+    LegCache approach_cache { .side = LegSide::Approach };
+    LegCache departure_cache { .side = LegSide::Departure };
+
+    const PlannedLeg* approach = nullptr;
+    if (first_leg(&approach_cache, &budget, in, sites, sites.board_spots[chain[entry]], &approach) != LegLookup::Planned) {
+        LogWarn << "ZiplineRoute: cannot walk to the first tower of the edited path." << VAR(nodes[chain[entry]].x)
+                << VAR(nodes[chain[entry]].y);
+        return std::nullopt;
+    }
+    const PlannedLeg* departure = nullptr;
+    if (first_leg(&departure_cache, &budget, in, sites, sites.land_spots[chain.back()], &departure) != LegLookup::Planned) {
+        LogWarn << "ZiplineRoute: cannot walk from the last tower of the edited path to the goal."
+                << VAR(nodes[chain.back()].x) << VAR(nodes[chain.back()].y) << VAR(in.request.goal.x) << VAR(in.request.goal.y);
+        return std::nullopt;
+    }
+
+    ZiplineRoute route {
+        .approach = approach->path,
+        .departure = departure->path,
+    };
+    // 保存的路径是用户的明确选择, 不跟步行比成本, 但一段路第一步就朝目的地反方向时它就是绕远,
+    // 改成直奔终点的直线 (允许跨高度), 免得下索后先往反方向走再绕回来
+    const double approach_length = straighten_reversed_leg(&route.approach, approach->length, "approach");
+    const double departure_length = straighten_reversed_leg(&route.departure, departure->length, "departure");
+    double zip_cost = in.cost.mount_penalty - in.cost.transfer_penalty;
+    for (size_t hop = entry; hop + 1 < chain.size(); ++hop) {
+        zip_cost += planar_distance(to_world(nodes[chain[hop]]), to_world(nodes[chain[hop + 1]])) * in.cost.speed_ratio
+                    + in.cost.transfer_penalty;
+    }
+    route.cost = approach_length + zip_cost + departure_length;
+    // index 是链上的位置, 塔本身还要过一遍 chain, 否则拿到的永远是记录里的前几根塔
+    for (size_t index = entry; index < chain.size(); ++index) {
+        route.towers.push_back(nodes[chain[index]]);
+    }
+    // e_hops 与跳一一对应, 截掉前面已经走过的那几跳
+    for (size_t hop = entry; hop < saved.e_hops.size(); ++hop) {
+        route.e_hops.push_back(saved.e_hops[hop]);
+    }
+    route.e_hops.resize(route.towers.size() - 1, false);
+    route.hop_alternates.resize(route.towers.size() - 1);
+    for (size_t hop = entry; hop + 1 < chain.size(); ++hop) {
+        for (const size_t other : graph.all[chain[hop]]) {
+            if (other != chain[hop + 1]) {
+                route.hop_alternates[hop - entry].push_back(nodes[other]);
+            }
+        }
+    }
+    if (in.request.capture_diagnostics) {
+        route.diagnostics.push_back(approach->diagnostic);
+        route.diagnostics.push_back(departure->diagnostic);
+    }
+    const navmesh::WorldPoint& approach_from =
+        route.approach.points.size() >= 2 ? route.approach.points[route.approach.points.size() - 2] : in.request.start;
+    route.mount_spots = mount_spots(
+        in.param,
+        in.request.locator_zone,
+        in.frame,
+        route.towers.front(),
+        in.frames.footprint(route.towers.front().template_id),
+        approach_from,
+        in.request.start,
+        sites.supply_points);
+    // 沿用自动选择那条日志的字段名, 日志分析工具才能照常还原这次滑索方案
+    LogInfo << "ZiplineRoute: picked the edited path." << VAR(route.cost) << VAR(route.towers.size()) << VAR(entry)
+            << VAR(route.towers.front().x) << VAR(route.towers.front().y) << VAR(route.towers.back().x)
+            << VAR(route.towers.back().y);
+    return route;
+}
+
 // 手工路径只认 (区, 终点) 与账号, 起点由本次实际位置决定
 std::optional<ZiplineRoute> plan_edited_path(
     const PlanInputs& in,
@@ -1126,92 +1257,22 @@ std::optional<ZiplineRoute> plan_edited_path(
         return std::nullopt;
     }
 
-    for (size_t hop = 0; hop + 1 < chain.size(); ++hop) {
-        if (chain[hop] == chain[hop + 1]) {
-            LogWarn << "ZiplineRoute: the edited path visits the same tower twice in a row." << VAR(hop);
-            return std::nullopt;
-        }
-        // 失败过的跳两个方向都已从图里封掉, 这里只查边还在不在
-        const std::vector<size_t>& links = graph.all[chain[hop]];
-        if (std::find(links.begin(), links.end(), chain[hop + 1]) == links.end()) {
-            LogWarn << "ZiplineRoute: the edited path contains a hop the records cannot connect." << VAR(hop)
-                    << VAR(nodes[chain[hop]].x) << VAR(nodes[chain[hop]].y) << VAR(nodes[chain[hop + 1]].x)
-                    << VAR(nodes[chain[hop + 1]].y);
-            return std::nullopt;
-        }
-    }
-    if (sites.board_spots[chain.front()].empty() || sites.land_spots[chain.back()].empty()) {
-        LogWarn << "ZiplineRoute: the edited path starts or ends on a tower unreachable from this leg."
-                << VAR(nodes[chain.front()].x) << VAR(nodes[chain.front()].y) << VAR(nodes[chain.back()].x)
-                << VAR(nodes[chain.back()].y);
+    // 已经在链上的某根塔时从那里接着走, 那里规划不出来再退回整条链
+    const size_t entry = snapped_chain_entry(in, nodes, chain);
+    if (entry + 1 >= chain.size()) {
+        // 站在链尾时剩下的就是走路, 从链首重规划会把人又送回去
+        LogWarn << "ZiplineRoute: we already stand on the last tower of the edited path, walking from here." << VAR(entry)
+                << VAR(chain.size());
         return std::nullopt;
     }
-
-    // 手工路径失败不占自动搜索的预算, 否则一条过期的编辑会让正常回退也搜不出东西
-    LegBudget budget;
-    LegCache approach_cache { .side = LegSide::Approach };
-    LegCache departure_cache { .side = LegSide::Departure };
-
-    const PlannedLeg* approach = nullptr;
-    if (first_leg(&approach_cache, &budget, in, sites, sites.board_spots[chain.front()], &approach) != LegLookup::Planned) {
-        LogWarn << "ZiplineRoute: cannot walk to the first tower of the edited path." << VAR(nodes[chain.front()].x)
-                << VAR(nodes[chain.front()].y);
-        return std::nullopt;
-    }
-    const PlannedLeg* departure = nullptr;
-    if (first_leg(&departure_cache, &budget, in, sites, sites.land_spots[chain.back()], &departure) != LegLookup::Planned) {
-        LogWarn << "ZiplineRoute: cannot walk from the last tower of the edited path to the goal."
-                << VAR(nodes[chain.back()].x) << VAR(nodes[chain.back()].y) << VAR(in.request.goal.x) << VAR(in.request.goal.y);
-        return std::nullopt;
-    }
-
-    ZiplineRoute route {
-        .approach = approach->path,
-        .departure = departure->path,
-    };
-    // 保存的路径是用户的明确选择, 不跟步行比成本, 但一段路第一步就朝目的地反方向时它就是绕远,
-    // 改成直奔终点的直线 (允许跨高度), 免得下索后先往反方向走再绕回来
-    const double approach_length = straighten_reversed_leg(&route.approach, approach->length, "approach");
-    const double departure_length = straighten_reversed_leg(&route.departure, departure->length, "departure");
-    double zip_cost = in.cost.mount_penalty - in.cost.transfer_penalty;
-    for (size_t hop = 0; hop + 1 < chain.size(); ++hop) {
-        zip_cost += planar_distance(to_world(nodes[chain[hop]]), to_world(nodes[chain[hop + 1]])) * in.cost.speed_ratio
-                    + in.cost.transfer_penalty;
-    }
-    route.cost = approach_length + zip_cost + departure_length;
-    for (const size_t index : chain) {
-        route.towers.push_back(nodes[index]);
-    }
-    route.e_hops = saved.e_hops;
-    route.e_hops.resize(route.towers.size() - 1, false);
-    route.hop_alternates.resize(chain.size() - 1);
-    for (size_t hop = 0; hop + 1 < chain.size(); ++hop) {
-        for (const size_t other : graph.all[chain[hop]]) {
-            if (other != chain[hop + 1]) {
-                route.hop_alternates[hop].push_back(nodes[other]);
-            }
+    if (entry > 0) {
+        if (std::optional<ZiplineRoute> route = plan_edited_chain(in, sites, graph, saved, chain, entry)) {
+            return route;
         }
+        LogWarn << "ZiplineRoute: cannot continue the edited path from where we stand, retrying from its first tower."
+                << VAR(entry);
     }
-    if (in.request.capture_diagnostics) {
-        route.diagnostics.push_back(approach->diagnostic);
-        route.diagnostics.push_back(departure->diagnostic);
-    }
-    const navmesh::WorldPoint& approach_from =
-        route.approach.points.size() >= 2 ? route.approach.points[route.approach.points.size() - 2] : in.request.start;
-    route.mount_spots = mount_spots(
-        in.param,
-        in.request.locator_zone,
-        in.frame,
-        route.towers.front(),
-        in.frames.footprint(route.towers.front().template_id),
-        approach_from,
-        in.request.start,
-        sites.supply_points);
-    // 沿用自动选择那条日志的字段名, 日志分析工具才能照常还原这次滑索方案
-    LogInfo << "ZiplineRoute: picked the edited path." << VAR(route.cost) << VAR(route.towers.size())
-            << VAR(route.towers.front().x) << VAR(route.towers.front().y) << VAR(route.towers.back().x)
-            << VAR(route.towers.back().y);
-    return route;
+    return plan_edited_chain(in, sites, graph, saved, chain, 0);
 }
 
 // 两段都指向 LegPicker 的缓存
