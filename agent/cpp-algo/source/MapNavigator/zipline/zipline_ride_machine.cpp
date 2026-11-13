@@ -653,13 +653,13 @@ StageResult tick_aiming(ZiplineRide* ride, ZiplineIo* io, const ZiplineObservati
 
 // 滑行中小地图隐藏, 定位连断就是滑出去了; 空响时人还在上索架上, 小地图照常显示
 // E 按下后按钮消失才算成功; 没消失就对同一个 E 重试, 两次点击间隔 0.5s.
-// 不同 E 之间还有最小间隔, 避免把同一提示的残留当成下一段.
+// 一次滑行能按几次 E 由规划给出的 e_press_budget 决定, 按满就不再扫, 免得把塔上别人的自动终点当成下一段.
 void maybe_press_e(ZiplineRide* ride, ZiplineIo* io, std::chrono::steady_clock::time_point now)
 {
-    if (!ride->plan.e_target || ride->plan.forward_towers.empty()) {
+    if (!ride->plan.e_target || ride->plan.e_press_budget <= 0) {
         return;
     }
-    if (ride->e_press_count >= static_cast<int>(ride->plan.forward_towers.size())) {
+    if (ride->e_press_count >= ride->plan.e_press_budget) {
         return;
     }
 
