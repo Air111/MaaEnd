@@ -782,10 +782,18 @@ void append_hop_waypoints(std::vector<Waypoint>* out_path, const ZiplineRoute& r
         }
         // 本跳的 E 由下一跳的标记触发: 下一跳的起点塔设置了自动终点, 这一跳途中才能按 E 直连过去
         const size_t trigger_hop = hop + 1;
-        if (trigger_hop < route.e_hops.size() && route.e_hops[trigger_hop] && !hop_plan.forward_towers.empty()) {
+        // 一次滑行能连按几次 E, 只数保存路径里从这里开始连续勾了自动终点的跳. 自动终点按塔存且只有单向
+        // (索本身两个方向都能坐, 但反向没有 E 提示), 所以按「后面还剩几根塔」放行就会把别的路线的终点按掉
+        int32_t e_press_budget = 0;
+        for (size_t index = trigger_hop; index < route.e_hops.size() && route.e_hops[index]; ++index) {
+            ++e_press_budget;
+        }
+        e_press_budget = std::min(e_press_budget, static_cast<int32_t>(hop_plan.forward_towers.size()));
+        if (e_press_budget > 0) {
+            hop_plan.e_press_budget = e_press_budget;
             hop_plan.e_target = hop_plan.forward_towers.front();
             LogInfo << "zipline/e/planned" << VAR(hop) << VAR(trigger_hop) << VAR(hop_plan.mount.x) << VAR(hop_plan.mount.y)
-                    << VAR(hop_plan.e_target->x) << VAR(hop_plan.e_target->y);
+                    << VAR(hop_plan.e_target->x) << VAR(hop_plan.e_target->y) << VAR(hop_plan.e_press_budget);
         }
         hop_plan.chain_continues = hop + 2 < route.towers.size();
         out_path->back().zipline_hop = hop_plan;
