@@ -220,6 +220,10 @@ jobs:
       CCACHE_DIR: ${{ github.workspace }}/.cache/ccache
       CCACHE_MAXSIZE: 1G
       CCACHE_BASEDIR: ${{ github.workspace }}
+    # 增量补丁需要读取上一次成功 install 的 artifact
+    permissions:
+      actions: read
+      contents: read
 
     steps:
       - uses: actions/checkout@v6
@@ -423,6 +427,87 @@ jobs:
           path: |
             install/agent/cpp-algo*
             install/agent/WebView2Loader.dll
+          retention-days: 90
+
+      # fork 预览专用：额外生成“上一份成功 intermediate → 本次”的覆盖补丁。
+      # 全量 artifact 始终保留，补丁失败不影响全量；官方仓库已有 MirrorChyan 服务端
+      # 增量，这里只在 fork（owner != MaaEnd）跑，避免每次构建多下载 328 MB。
+      # 两次构建无文件差异时仍上传一个空的 no-changes.zip，artifact 名带 -no-changes。
+      - name: Resolve previous intermediate artifact
+        id: previous
+        if: matrix.os == 'win' && matrix.arch == 'x86_64' && github.repository_owner != 'MaaEnd'
+        continue-on-error: true
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          set +e
+          info=$(uv run --quiet tools/find_previous_artifact.py)
+          rc=$?
+          set -e
+          case "$rc" in
+            0)
+              echo "$info"
+              run_id=$(printf '%s\n' "$info" | awk '/^[0-9]+ / {print $1; exit}')
+              if [ -z "$run_id" ]; then
+                echo "::error::resolver returned no run id"
+                exit 2
+              fi
+              echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+              ;;
+            1)
+              echo "::warning::no usable previous intermediate artifact; skipping incremental patch"
+              ;;
+            *)
+              echo "::error::failed to resolve previous intermediate artifact (exit $rc)"
+              exit "$rc"
+              ;;
+          esac
+
+      - name: Download previous intermediate artifact
+        id: download
+        if: steps.previous.outputs.run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: MaaEnd-win-x86_64-intermediate
+          path: prev-install
+          run-id: ${{ steps.previous.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Report previous intermediate download failure
+        if: steps.previous.outputs.run_id != '' && steps.download.outcome != 'success'
+        shell: bash
+        run: echo "::error::failed to download previous intermediate artifact from run ${{ steps.previous.outputs.run_id }}"
+
+      - name: Generate incremental patch
+        id: patch
+        if: steps.download.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run tools/make_incremental_patch.py \
+            --old prev-install \
+            --new install \
+            --out patch \
+            --empty-marker no-changes.zip
+          prev_tag=$(uv run python -c 'import json; print(json.load(open("prev-install/interface.json", encoding="utf-8"))["version"])')
+          cur_tag=$(uv run python -c 'import json; print(json.load(open("install/interface.json", encoding="utf-8"))["version"])')
+          suffix=""
+          if [ -f patch/no-changes.zip ]; then
+            suffix="-no-changes"
+            echo "::notice::no file changes between the two builds; uploading the empty marker"
+          fi
+          echo "name=patch-win-x86_64-${prev_tag}-to-${cur_tag}${suffix}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v6
+        if: steps.patch.outputs.name != ''
+        with:
+          name: ${{ steps.patch.outputs.name }}
+          path: patch
           retention-days: 90
 
   package_linux_tarball:
