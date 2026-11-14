@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace zipline
@@ -23,6 +24,8 @@ struct ZiplineMapRecord
 {
     // 由 HashUidForAccount 生成, 为空表示待 claimLegacyRecords 认领的无主记录
     std::string account_id;
+    // 原始游戏 UID 或网页 roleId, 只用于展示; 匹配仍只看 account_id, 旧记录可能为空
+    std::string uid;
     std::string map_id;
     std::string fetched_at;
     std::vector<ZiplineMark> marks;
@@ -40,6 +43,15 @@ public:
 
     // 按 (account_id, map_id) 整张替换, 拆掉的滑索必须随之消失
     void replaceMap(ZiplineMapRecord record);
+
+    // 只替换指定 level 的标记，其他 level 原样保留；用于只导入部分小区。
+    void mergeLevels(
+        const std::string& account_id,
+        const std::string& uid,
+        const std::string& map_id,
+        const std::unordered_set<std::string>& levels,
+        std::vector<ZiplineMark> marks,
+        const std::string& fetched_at);
 
     // 只在该账号名下没有任何记录时认领无主记录并落盘, 返回认领条数
     size_t claimLegacyRecords(const std::string& account_id, const std::filesystem::path& path);

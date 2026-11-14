@@ -179,6 +179,27 @@ bool ZiplineIoPressMount(ZiplineIo* io)
     return press_mount_prompt(io->nav->maa_context);
 }
 
+// 滑行中的 E 提示只在提示本身出现时按, 按完由下一次停点的定位验证是否真的换乘
+bool ZiplineIoPressZiplineE(ZiplineIo* io)
+{
+    return io->nav->maa_context != nullptr
+           && run_node_and_report_hit(io->nav->maa_context, kZiplineEStartNode, kZiplineENode, "{}");
+}
+
+// 按下后只认按钮消失; 识别节点改成 DoNothing, 不产生第二次点击
+bool ZiplineIoIsZiplineEPromptVisible(ZiplineIo* io)
+{
+    if (io->nav->maa_context == nullptr) {
+        return false;
+    }
+    json::object node;
+    node["action"] = "DoNothing";
+    node["next"] = json::array {};
+    json::object root;
+    root[kZiplineENode] = std::move(node);
+    return run_node_and_report_hit(io->nav->maa_context, kZiplineEStartNode, kZiplineENode, json::value(std::move(root)).dumps());
+}
+
 void ZiplineIoFireLaunch(ZiplineIo* io)
 {
     HoldPosition(io->nav->motion_controller);
@@ -263,15 +284,80 @@ Result abandon_chain_on_tower(Navigator* nav, const char* reason, const char* de
     return restart_after_dropped_chain(nav, reason);
 }
 
+// E 换乘把中间几跳吃掉了, 从实际落点找链路上从这根塔出发的下一跳
+bool skip_to_forward_hop(Navigator* nav, const ZiplineNodeRef& tower, const char* reason)
+{
+    const std::vector<Waypoint>& path = nav->session->current_path;
+    const size_t current = nav->session->current_node_idx;
+    for (size_t i = current; i < path.size(); ++i) {
+        const Waypoint& waypoint = path[i];
+        if (waypoint.action == ActionType::ZIPLINE && waypoint.zipline_hop && SameTower(waypoint.zipline_hop->mount, tower)) {
+            if (i > current) {
+                NoteInteraction(nav->session);
+                LeaveWaypointsThrough(nav->session, i - 1, reason);
+                LogInfo << "Action: ZIPLINE E skip to the hop underfoot." << VAR(reason) << VAR(current) << VAR(i) << VAR(tower.x)
+                        << VAR(tower.y);
+            }
+            return true;
+        }
+        // 只跳过生成的连续走路点; 作者必经点、交互点不能跳
+        if (waypoint.action != ActionType::ZIPLINE && !IsContinuousRun(waypoint)) {
+            return false;
+        }
+    }
+    return false;
+}
+
+// 实际落点就是链尾, 后面没有可起的下一跳, 把剩余滑索点一并跳掉走下索段
+bool skip_remaining_zipline_hops(Navigator* nav, const char* reason)
+{
+    const std::vector<Waypoint>& path = nav->session->current_path;
+    const size_t current = nav->session->current_node_idx;
+    size_t last = current;
+    bool saw_zipline = false;
+    for (size_t i = current; i < path.size(); ++i) {
+        if (path[i].action == ActionType::ZIPLINE) {
+            last = i;
+            saw_zipline = true;
+            continue;
+        }
+        if (IsContinuousRun(path[i])) {
+            continue;
+        }
+        break;
+    }
+    if (!saw_zipline) {
+        return false;
+    }
+    NoteInteraction(nav->session);
+    LeaveWaypointsThrough(nav->session, last, reason);
+    LogInfo << "Action: ZIPLINE E skip the remaining hops to the departure." << VAR(reason) << VAR(current) << VAR(last);
+    return true;
+}
+
 Result finish_hop(Navigator* nav, const HopCompleted& done)
 {
     Result result;
     result.consumed = true;
     result.stay_in_current_tick = true;
 
+    const Waypoint& current = CurrentWaypoint(*nav->session);
+    const bool forward_landing =
+        done.reached && current.zipline_hop && !SameTower(*done.reached, current.zipline_hop->landing);
     NoteCanonicalFinalGoalConsumed(nav->session, CurrentAbsoluteNodeIndex(*nav->session), done.at, "zipline_ride_complete");
     NoteInteraction(nav->session);
-    LeaveCurrentWaypoint(nav->session, ActionType::ZIPLINE, "zipline_ride_complete");
+    if (forward_landing) {
+        LogInfo << "Action: ZIPLINE E forward landing." << VAR(done.reached->x) << VAR(done.reached->y);
+        if (!skip_to_forward_hop(nav, *done.reached, "zipline_e_skip")) {
+            if (!skip_remaining_zipline_hops(nav, "zipline_e_skip_tail")) {
+                LogWarn << "Action: ZIPLINE E landing has no forward hop to skip." << VAR(done.reached->x) << VAR(done.reached->y)
+                        << VAR(nav->session->current_node_idx);
+            }
+        }
+    }
+    else {
+        LeaveCurrentWaypoint(nav->session, ActionType::ZIPLINE, "zipline_ride_complete");
+    }
     ResetOnWaypointAdvance(&nav->runtime_state);
     LogInfo << "Action: ZIPLINE ride landed." << VAR(done.at.x) << VAR(done.at.y) << VAR(done.still_on_tower);
     if (!done.at.zone_id.empty()) {
@@ -370,20 +456,28 @@ Result AbandonZipline(Navigator* nav, const char* reason, const char* detail)
     return abandon_chain_from_ground(nav, reason, detail);
 }
 
+bool ScreenShowsZiplineTower(Navigator* nav)
+{
+    ZiplineIo io { nav };
+    return ZiplineIoCheckMounted(&io) == MountVerdict::OnTower;
+}
+
+void StepOffZiplineTower(Navigator* nav)
+{
+    ZiplineIo io { nav };
+    ZiplineIoDismount(&io);
+    // 刚下来的那几百毫秒移动指令还会被架子吃掉
+    SleepFor(kZiplineLaunchSettleMs);
+}
+
 void LeaveZiplineTower(Navigator* nav)
 {
     ZiplineRide* ride = &nav->runtime_state.zipline_ride;
-    const bool was_on_tower = ZiplineOnTower(*ride);
-    ZiplineIo io { nav };
-    if (was_on_tower) {
-        ZiplineIoDismount(&io);
+    if (ZiplineOnTower(*ride)) {
+        StepOffZiplineTower(nav);
     }
     RecordDismissedHop(ride);
     ResetZiplineHop(ride);
-    // 刚下来的那几百毫秒移动指令还会被架子吃掉
-    if (was_on_tower) {
-        SleepFor(kZiplineLaunchSettleMs);
-    }
 }
 
 Result StartZiplineHop(Navigator* nav, const Waypoint& waypoint, double actual_distance)

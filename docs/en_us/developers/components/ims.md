@@ -183,6 +183,10 @@ If A2 has never succeeded (`hasData=false`), A3 still recognizes the rewards but
 
 With a cache it also prints one summary; no Pipeline Starting/Succeeded Focus is stacked on top.
 
+### Turning it off globally
+
+Settings → Task settings → Item stats → "Reward popup item stats (IMS)" disables A3 globally: `assets/tasks/setting/ItemStats.json` uses `global_option` to override the `action` of all 12 A3 call sites (the two shared rewards nodes, `AddItemDataOnRewards`, and the per-task hard-coded A3 nodes) to `DoNothing`; only the scan and summary are skipped, clicking is unchanged. On by default.
+
 > Reward popups animate in; use `pre_wait_freezes` on the item area before calling A3 (for Protocol Space see `ProtocolSpaceRewardAddItemData`).
 >
 > Reference Pipeline: `AddItemDataOnRewards` → `AddItemDataCloseRewards`.

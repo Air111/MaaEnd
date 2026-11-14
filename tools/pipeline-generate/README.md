@@ -12,6 +12,8 @@ MaaEnd 使用由 zmdmap 数据 CI 生成并发布的精简游戏数据，落在 
 
 这些文件都是按任务需要裁剪出的游戏数据，不是完整的上游数据快照：除了最前面的两个元数据字段（`version`：这份数据来自哪一版游戏数据；`sha256`：这份数据**原始形态**（只带世界坐标的那一份）的内容指纹，入库投影后照抄、不重算），不放别的来源元数据，字段说明也不放进 JSON（字段含义见 [`tools/zmdmap`](../zmdmap/README.md) 与各数据集模块）。
 
+修改 `assets/` 下的 JSON 前，先确认它是不是生成器产物：看同目录的 `config.json`、`template.json(c)`、`data.mjs`，命中就改模板/数据源再重跑生成器，不要手改产物。
+
 ## 数据流
 
 zmdmap 的数据树就在 `tools/zmdmap/`：`data/raw/` 放原样产物（不入库），`data/` 放可以直接用的数据（入库）。上游发布的数据**只带游戏世界坐标**，不含底图像素：投影参数（`zone` / `sx` / `tx` / `sy` / `ty`）属于 BaseNav 数据包，只有 MaaEnd 手里有。所以下载下来的原始数据先落在不入库的 `tools/zmdmap/data/raw/`，再由投影步骤（`uv run zmdmap fetch` 的一部分）按 BaseNav 的 zone 表把 `x` / `z` 原位换成 `u` / `v` 进入库的 `tools/zmdmap/data/*.json` —— 各任务生成器只读这一份。

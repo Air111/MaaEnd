@@ -1,0 +1,91 @@
+{
+    "option": {
+        "RewardsItemStats": {
+            "type": "switch",
+            "label": "$option.RewardsItemStats.label",
+            "description": "$option.RewardsItemStats.description",
+            "cases": [
+                {
+                    "name": "Yes"
+                },
+                {
+                    "name": "No",
+                    "pipeline_override": {
+                        // 公共奖励节点（Interface/Scene.json）的 IMS A3 动作。
+                        "SceneNoticeRewardsConfirm": {
+                            "action": {
+                                "type": "DoNothing"
+                            }
+                        },
+                        "SceneNoticeRewardsConfirmWithAnchor": {
+                            "action": {
+                                "type": "DoNothing"
+                            }
+                        },
+                        // IMS 自带的 A3 最佳实践节点。
+                        "AddItemDataOnRewards": {
+                            "action": {
+                                "type": "DoNothing"
+                            }
+                        },
+                        // 各任务自己写死的 A3 调用点；扁平写法的节点沿用字符串 action。
+                        "AutoDeliveryCloseRewardDialog": {
+                            "action": "DoNothing"
+                        },
+                        "AutoStockStapleQuantityControlCloseRewards": {
+                            "action": {
+                                "type": "DoNothing"
+                            }
+                        },
+                        "CreditShoppingClaimConfirm": {
+                            "action": {
+                                "type": "DoNothing"
+                            }
+                        },
+                        "DijiangRewardsFastCollectAddItemData": {
+                            "action": {
+                                "type": "DoNothing"
+                            }
+                        },
+                        "GrowthChamberClaimRewardClose": {
+                            "action": {
+                                "type": "DoNothing"
+                            }
+                        },
+                        "MFGCabinClaimRewardClose": {
+                            "action": {
+                                "type": "DoNothing"
+                            }
+                        },
+                        "ReceptionRoomSendCluesQuickGiveClose": {
+                            "action": {
+                                "type": "DoNothing"
+                            }
+                        },
+                        "ProtocolSpaceRewardAddItemData": {
+                            "action": "DoNothing"
+                        },
+                        "TrialOfSwordmancyFightSuccess": {
+                            "action": "DoNothing"
+                        }
+                    }
+                }
+            ],
+            "default_case": "Yes"
+        }
+    },
+    "global_option": [
+        "RewardsItemStats"
+    ],
+    "setting": [
+        {
+            "name": "ItemStats",
+            "label": "$option.ItemStats.label",
+            "description": "$option.ItemStats.description",
+            "option": [
+                "RewardsItemStats"
+            ],
+            "default_expand": false
+        }
+    ]
+}

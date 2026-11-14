@@ -16,6 +16,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
+            "__ScenePrivateWorldEnterMenuMissionKey",
             "__ScenePrivateWorldEnterMenuMission",
             "[JumpBack]SceneAnyEnterWorld"
         ]
@@ -37,6 +38,7 @@
         "rate_limit": 0,
         "next": [
             "InRegionalDevelopment",
+            "__ScenePrivateWorldEnterMenuRegionalDevelopmentKey",
             "__ScenePrivateWorldEnterMenuRegionalDevelopment",
             "[JumpBack]__ScenePrivateMenuRegionalDevelopmentView2EnterMenuRegionalDevelopment",
             "[JumpBack]SceneAnyEnterWorld"
@@ -89,6 +91,39 @@
         "next": [
             "__ScenePrivateWorldEnterMenuOperationalManual",
             "[JumpBack]SceneAnyEnterWorld"
+        ]
+    },
+    "SceneEnterMenuOperationalManualIndex": {
+        "desc": "从任意界面进入行动手册-索引",
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "__ScenePrivateAnyEnterMenuOperationalManualIndexSuccess",
+            "__ScenePrivateMenuOperationalManualEnterIndexTab",
+            "[JumpBack]SceneEnterMenuOperationalManual"
+        ]
+    },
+    "SceneEnterMenuOperationalManualDaily": {
+        "desc": "从任意界面进入行动手册-日常",
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "__ScenePrivateAnyEnterMenuOperationalManualDailySuccess",
+            "__ScenePrivateMenuOperationalManualEnterDailyTab",
+            "[JumpBack]SceneEnterMenuOperationalManual"
+        ]
+    },
+    "SceneEnterMenuOperationalManualSimulation": {
+        "desc": "从任意界面进入行动手册-模拟",
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "__ScenePrivateAnyEnterMenuOperationalManualSimulationSuccess",
+            "__ScenePrivateMenuOperationalManualEnterSimulationTab",
+            "[JumpBack]SceneEnterMenuOperationalManual"
         ]
     },
     "SceneEnterMenuOperationalManualUmbralMonument": {

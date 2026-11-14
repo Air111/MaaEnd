@@ -34,6 +34,9 @@ struct ZiplineRoute
     navmesh::WorldPath departure; // 下索点 → 终点
     // 至少两根, 中间的既是上一跳落点也是下一跳上索点
     std::vector<zipline::ZiplineNode> towers;
+    // 与 towers 逐跳对应; 手工链的自动终点标记. true 表示这一跳的起点塔设置了自动终点,
+    // 实际按 E 在进入该塔的上一段; 第一条跳没有上一段, 运行时忽略.
+    std::vector<bool> e_hops;
     // 与 towers 逐跳对应(最后一根没有), 列出这根架子上下一跳以外的索通向的架子
     std::vector<std::vector<zipline::ZiplineNode>> hop_alternates;
     // 折算成等效走路距离
@@ -59,10 +62,14 @@ struct ZiplineLegRequest
     std::optional<double> goal_deck_y;
     std::optional<double> start_floor_y;
     std::optional<double> start_deck_y;
+    std::optional<double> zone_floor_y;
     MaaContext* maa_context = nullptr;
     bool capture_diagnostics = false;
     // 上下索两段步行与作者路线避开同一批禁区
     const std::vector<VirtualNoGoDisc>* no_go = nullptr;
+    // 只认保存的手工路径; 没命中或走不通就放弃本次, 不去搜自动方案.
+    // 调用方据此在不展开整段走路的前提下先试一次, 失败再照作者路线展开
+    bool saved_route_only = false;
 };
 
 std::optional<ZiplineRoute> PlanZiplineRoute(ZiplineOutcome* outcome, const NaviParam& param, const ZiplineLegRequest& request);

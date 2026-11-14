@@ -40,6 +40,7 @@ struct LegState
     // 本字段和 route_start_deck_y 只有整条链的头一腿有值
     std::optional<double> route_start_floor_y;
     std::optional<double> route_start_deck_y;
+    std::optional<double> zone_floor_y;
     std::string current_zone;
     std::string navmesh_zone;
 };
@@ -60,6 +61,7 @@ RouteEndpoints leg_endpoints(const LegState& state, const navmesh::WorldPoint& g
         .goal = goal,
         .goal_floor_y = goal_floor_y,
         .goal_deck_y = goal_deck_y,
+        .zone_floor_y = state.zone_floor_y,
     };
 }
 
@@ -86,6 +88,14 @@ NavmeshExpansionFailure zone_failure(std::string code, std::string message, cons
         .message = std::move(message),
         .zone_id = state.current_zone,
     };
+}
+
+float zone_floor(const navmesh::BaseNavPack& pack, const std::string& zone, std::optional<double> zone_floor_y)
+{
+    if (zone_floor_y) {
+        return static_cast<float>(*zone_floor_y);
+    }
+    return navmesh::FloorYForZoneName(pack, zone);
 }
 
 navmesh::BaseNavRouteRequest build_route_request(
@@ -117,7 +127,7 @@ navmesh::BaseNavRouteRequest build_route_request(
     if (endpoints.start_deck_y) {
         request.start_deck_y = static_cast<float>(*endpoints.start_deck_y);
     }
-    const float zone_floor_y = navmesh::FloorYForZoneName(pack, locator_zone);
+    const float zone_floor_y = zone_floor(pack, locator_zone, endpoints.zone_floor_y);
     request.start_floor_y = endpoints.start_floor_y ? static_cast<float>(*endpoints.start_floor_y) : zone_floor_y;
     // 终点兜底取 zone 主层, 被覆盖的起点高度只代表人站在哪
     request.goal_floor_y = endpoints.goal_floor_y > navmesh::kBaseNavFloorYValidMin ? endpoints.goal_floor_y : zone_floor_y;
@@ -188,7 +198,7 @@ void fail_waypoint(
     }
     if (route_result != nullptr) {
         recorded.route_status = navmesh::ToString(route_result->status);
-        recorded.route_error = route_result->error;
+        recorded.route_error = navmesh::ToString(route_result->failure);
         recorded.gap_start = route_result->gap_start;
         recorded.gap_goal = route_result->gap_goal;
         recorded.gap_distance = route_result->gap_distance;
@@ -218,7 +228,8 @@ bool has_explicit_coordinate_frame(const Waypoint& waypoint)
 
 std::string route_error_text(const navmesh::BaseNavRouteResult& route_result)
 {
-    return route_result.error.empty() ? navmesh::ToString(route_result.status) : route_result.error;
+    return route_result.failure == navmesh::RouteFailure::None ? navmesh::ToString(route_result.status)
+                                                               : navmesh::ToString(route_result.failure);
 }
 
 std::vector<std::vector<double>> path_points_for_log(const navmesh::WorldPath& path)
@@ -238,6 +249,7 @@ void update_state_from_regular_waypoint(LegState* state, const Waypoint& waypoin
     }
     if (!waypoint.zone_id.empty()) {
         state->current_zone = waypoint.zone_id;
+        state->zone_floor_y = waypoint.zone_floor_y;
     }
 }
 
@@ -325,8 +337,9 @@ navmesh::BaseNavRouteResult plan_corridor_route(
     navmesh::BaseNavRouteResult result;
     const navmesh::BaseNavZone* zone = navmesh::FindBaseNavZoneByName(mesh.pack, request.zone_name);
     if (zone == nullptr) {
+        LogWarn << "NAVMESH zone not found." << VAR(request.zone_name);
         result.status = navmesh::BaseNavRouteStatus::ZoneNotFound;
-        result.error = "未找到 navmesh 区域: " + request.zone_name;
+        result.failure = navmesh::RouteFailure::ZoneNotFound;
         return result;
     }
     const float start_floor = request.start_floor_y > navmesh::kBaseNavFloorYValidMin ? request.start_floor_y : request.floor_y;
@@ -352,11 +365,12 @@ navmesh::BaseNavRouteResult plan_corridor_route(
     result.gap_goal = plan.debug.gap_goal;
     result.gap_distance = plan.debug.gap_distance;
     if (!plan.ok || plan.points.size() < 2) {
-        result.error = plan.error.empty() ? "规划结果没有可执行路径点" : plan.error;
+        result.failure = plan.failure == navmesh::RouteFailure::None ? navmesh::RouteFailure::NoUsablePath : plan.failure;
         if (plan.no_go) {
             result.status = navmesh::BaseNavRouteStatus::NoGo;
         }
-        LogWarn << "RECAST plan failed." << VAR(request.zone_name) << VAR(request.no_go_discs.size()) << VAR(result.error);
+        const char* reason = navmesh::ToString(result.failure);
+        LogWarn << "RECAST plan failed." << VAR(request.zone_name) << VAR(request.no_go_discs.size()) << VAR(reason);
         return result;
     }
     for (const std::string& warning : plan.warnings) {
@@ -622,8 +636,9 @@ bool append_blind_target_fallback(
         return fail_with(out_error, "找不到当前区域的 navmesh");
     }
     const double snap_radius = std::max(ctx->param->navmesh_snap_radius, kBlindTargetFallbackSnapRadius);
-    const float snap_floor =
-        goal_floor_y > navmesh::kBaseNavFloorYValidMin ? goal_floor_y : navmesh::FloorYForZoneName(ctx->mesh->pack, state->current_zone);
+    const float snap_floor = goal_floor_y > navmesh::kBaseNavFloorYValidMin
+                                 ? goal_floor_y
+                                 : zone_floor(ctx->mesh->pack, state->current_zone, state->zone_floor_y);
 
     // 探针剩余缺口至少是 offset - snap_radius, 超出这个上限的探针必然过不了缺口检查
     const double probe_limit = std::min(total, kBlindTargetMaxExtension + snap_radius);
@@ -762,6 +777,24 @@ void append_hop_waypoints(std::vector<Waypoint>* out_path, const ZiplineRoute& r
                 hop_plan.siblings.push_back(ToNodeRef(other));
             }
         }
+        for (size_t forward_index = hop + 2; forward_index < route.towers.size(); ++forward_index) {
+            hop_plan.forward_towers.push_back(ToNodeRef(route.towers[forward_index]));
+        }
+        // 本跳的 E 由下一跳的标记触发: 下一跳的起点塔设置了自动终点, 这一跳途中才能按 E 直连过去
+        const size_t trigger_hop = hop + 1;
+        // 一次滑行能连按几次 E, 只数保存路径里从这里开始连续勾了自动终点的跳. 自动终点按塔存且只有单向
+        // (索本身两个方向都能坐, 但反向没有 E 提示), 所以按「后面还剩几根塔」放行就会把别的路线的终点按掉
+        int32_t e_press_budget = 0;
+        for (size_t index = trigger_hop; index < route.e_hops.size() && route.e_hops[index]; ++index) {
+            ++e_press_budget;
+        }
+        e_press_budget = std::min(e_press_budget, static_cast<int32_t>(hop_plan.forward_towers.size()));
+        if (e_press_budget > 0) {
+            hop_plan.e_press_budget = e_press_budget;
+            hop_plan.e_target = hop_plan.forward_towers.front();
+            LogInfo << "zipline/e/planned" << VAR(hop) << VAR(trigger_hop) << VAR(hop_plan.mount.x) << VAR(hop_plan.mount.y)
+                    << VAR(hop_plan.e_target->x) << VAR(hop_plan.e_target->y) << VAR(hop_plan.e_press_budget);
+        }
         hop_plan.chain_continues = hop + 2 < route.towers.size();
         out_path->back().zipline_hop = hop_plan;
     }
@@ -784,18 +817,27 @@ void append_departure(
         out_path->back().strict_arrival = true;
     }
     (*out_path)[last_hop_index].zipline_hop->exit_aim = pick_exit_aim_point(*out_path, departure_index, dismount);
+    // E 直接落到链尾时没有下一跳可借 exit_aim, 提前把链尾的下索朝向回填到每一跳
+    const std::optional<ZiplineMountSpot>& tail_exit_aim = (*out_path)[last_hop_index].zipline_hop->exit_aim;
+    for (Waypoint& waypoint : *out_path) {
+        if (waypoint.action == ActionType::ZIPLINE && waypoint.zipline_hop) {
+            waypoint.zipline_hop->e_exit_aim = tail_exit_aim;
+        }
+    }
     if (target.deck_y) {
         out_path->back().target_deck_y = target.deck_y;
     }
 }
 
-// walking_path 非空时滑索只在严格更省时顶替走路, 为空时用来桥接步行不连通的两侧
+// walking_path 非空时滑索只在严格更省时顶替走路, 为空时用来桥接步行不连通的两侧;
+// saved_route_only 见 ZiplineLegRequest 的同名字段
 bool try_append_zipline_leg(
     ExpansionContext* ctx,
     LegState* state,
     std::vector<Waypoint>* out_path,
     const ProjectedTarget& target,
-    const navmesh::WorldPath* walking_path)
+    const navmesh::WorldPath* walking_path,
+    bool saved_route_only = false)
 {
     auto route = PlanZiplineRoute(
         ctx->zipline_outcome,
@@ -810,9 +852,11 @@ bool try_append_zipline_leg(
             .goal_deck_y = target.deck_y,
             .start_floor_y = state->route_start_floor_y,
             .start_deck_y = state->route_start_deck_y,
+            .zone_floor_y = state->zone_floor_y,
             .maa_context = ctx->maa_context,
             .capture_diagnostics = ctx->diagnostics != nullptr,
             .no_go = ctx->no_go,
+            .saved_route_only = saved_route_only,
         });
     if (!route || route->approach.points.empty() || route->departure.points.empty() || route->towers.size() < 2) {
         return false;
@@ -883,12 +927,13 @@ bool handle_unreachable_leg(
 {
     // 下面的兜底都不看可走面, 禁区必须先拦下, 否则会穿过禁区
     if (leg.route_result.status == navmesh::BaseNavRouteStatus::NoGo) {
+        const char* reason = navmesh::ToString(leg.route_result.failure);
         LogError << "NAVMESH waypoint rejected by a virtual no-go zone." << VAR(state->navmesh_zone) << VAR(state->current_zone)
-                 << VAR(leg.target.point.x) << VAR(leg.target.point.y) << VAR(leg.route_result.error);
+                 << VAR(leg.target.point.x) << VAR(leg.target.point.y) << VAR(reason);
         fail_waypoint(
             ctx,
             "route_no_go",
-            " 无法规划：" + leg.route_result.error,
+            std::string(" 无法规划：") + reason,
             waypoint,
             authored_index,
             *state,
@@ -1099,6 +1144,51 @@ bool rides_zipline(const std::vector<Waypoint>& out_path, size_t output_begin)
     });
 }
 
+// 段尾 target 之后的动作点照常追加, 被替换掉走路时这一段也不能丢
+bool append_span_tail(ExpansionContext* ctx, LegState* state, std::vector<Waypoint>* out_path, size_t target_index, size_t end)
+{
+    const std::vector<Waypoint>& path = ctx->param->path;
+    for (size_t index = target_index; index < end; ++index) {
+        if (index == target_index && IsMovementPoint(path[index])) {
+            continue;
+        }
+        if (!append_stamped_authored_waypoint(ctx, state, out_path, index)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// 保存的滑索路径只按 (区, 终点) 命中, 命中后上下索两段都由它定, 不必先把整段走路规划出来当基线;
+// 没命中或走不通时返回 false, 由调用方照作者路线照常展开
+bool append_saved_zipline_span(
+    ExpansionContext* ctx,
+    LegState* state,
+    std::vector<Waypoint>* out_path,
+    size_t begin,
+    size_t end,
+    size_t target_index)
+{
+    if (cancel_if_stopped(ctx, *state)) {
+        return false;
+    }
+    // 没有走路基线, 叠层处只能按坐标本身落层
+    const ProjectedTarget target = resolve_projected_target(ctx->mesh->pack, ctx->param->path[target_index]);
+    const size_t output_begin = out_path->size();
+    LegState shortcut_state = *state;
+    std::vector<Waypoint> shortcut;
+    if (!try_append_zipline_leg(ctx, &shortcut_state, &shortcut, target, nullptr, true)) {
+        return false;
+    }
+
+    out_path->insert(out_path->end(), std::make_move_iterator(shortcut.begin()), std::make_move_iterator(shortcut.end()));
+    stamp_authored_group(out_path, output_begin, begin);
+    *state = shortcut_state;
+    LogInfo << "Zipline planned the saved path on its own, the walk was never expanded." << VAR(begin) << VAR(end)
+            << VAR(target_index) << VAR(out_path->size() - output_begin);
+    return append_span_tail(ctx, state, out_path, target_index, end);
+}
+
 // 先照作者路线展开当基线, 滑索比基线省够了才把这段走路整段换掉, 段尾的动作照常保留
 bool append_replaceable_span(ExpansionContext* ctx, LegState* state, std::vector<Waypoint>* out_path, size_t begin, size_t end)
 {
@@ -1106,6 +1196,16 @@ bool append_replaceable_span(ExpansionContext* ctx, LegState* state, std::vector
     const LegState span_start = *state;
     const size_t output_begin = out_path->size();
     const size_t diagnostics_begin = ctx->diagnostics == nullptr ? 0 : ctx->diagnostics->size();
+    const std::optional<size_t> target_index = last_positioned_index(path, begin, end);
+    // 段里一个走路点都没有时这一段本来就没有走路可省, 不该拿滑索去顶
+    const bool walking_span = std::any_of(path.begin() + static_cast<std::ptrdiff_t>(begin),
+                                          path.begin() + static_cast<std::ptrdiff_t>(end),
+                                          [](const Waypoint& waypoint) { return IsMovementPoint(waypoint); });
+    // 保存的滑索路径已经把上下索两段定死了, 先只规划这两段; 仓储前那十几秒一半是白展开的走路基线
+    if (walking_span && target_index && append_saved_zipline_span(ctx, state, out_path, begin, end, *target_index)) {
+        return true;
+    }
+
     for (size_t index = begin; index < end; ++index) {
         if (cancel_if_stopped(ctx, *state)) {
             return false;
@@ -1115,9 +1215,8 @@ bool append_replaceable_span(ExpansionContext* ctx, LegState* state, std::vector
         }
     }
 
-    const std::optional<size_t> target_index = last_positioned_index(path, begin, end);
     // 基线里已有的滑索是步行不通时的桥, 不再拿别的滑索去比
-    if (!target_index || rides_zipline(*out_path, output_begin)) {
+    if (!walking_span || !target_index || rides_zipline(*out_path, output_begin)) {
         return true;
     }
 
@@ -1148,20 +1247,13 @@ bool append_replaceable_span(ExpansionContext* ctx, LegState* state, std::vector
             first + static_cast<std::ptrdiff_t>(diagnostics_end));
     }
     LogInfo << "Zipline replaced the walking of an authored span." << VAR(begin) << VAR(end) << VAR_AS(target_index, *target_index);
-    for (size_t index = *target_index; index < end; ++index) {
-        if (index == *target_index && IsMovementPoint(path[index])) {
-            continue;
-        }
-        if (!append_stamped_authored_waypoint(ctx, state, out_path, index)) {
-            return false;
-        }
-    }
-    return true;
+    return append_span_tail(ctx, state, out_path, *target_index, end);
 }
 
 void append_zone_declaration(LegState* state, std::vector<Waypoint>* out_path, const Waypoint& waypoint)
 {
     state->current_zone = waypoint.zone_id;
+    state->zone_floor_y = waypoint.zone_floor_y;
     out_path->push_back(waypoint);
 }
 
@@ -1281,8 +1373,9 @@ bool ExpandNavmeshWaypoints(
     const std::string current_zone = initial_pos.zone_id.empty() ? param.map_name : initial_pos.zone_id;
     LegState state {
         .route_start = { .x = initial_pos.x, .y = initial_pos.y },
-        .route_start_floor_y = initial_pos.floor_y,
+        .route_start_floor_y = initial_pos.floor_y ? initial_pos.floor_y : initial_pos.zone_floor_y,
         .route_start_deck_y = start_deck_y,
+        .zone_floor_y = initial_pos.zone_floor_y,
         .current_zone = current_zone,
         .navmesh_zone = InferBaseNavZone(current_zone, param.map_name),
     };

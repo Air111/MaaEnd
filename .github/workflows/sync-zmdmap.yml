@@ -58,6 +58,7 @@ jobs:
           pnpm generate:GiftOperator
           pnpm generate:SceneTeleport
           pnpm generate:AutoEssence
+          pnpm generate:ZiplineImport
 
       - name: Get version info
         id: version
@@ -94,6 +95,7 @@ jobs:
             - GiftOperator
             - SceneTeleport
             - AutoEssence
+            - ZiplineImport
 
             **Version Information:**
             - Version: ${{ steps.version.outputs.version }}

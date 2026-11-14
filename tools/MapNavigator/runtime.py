@@ -7,7 +7,17 @@ from pathlib import Path
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-INSTALL_DIR = PROJECT_ROOT / "install"
+
+
+def _resolve_install_dir() -> Path:
+    """允许工具直接操控另一个已安装的 MaaEnd, 例如 app 目录里的用户数据。"""
+    override = os.environ.get("MAPNAV_INSTALL_DIR", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return PROJECT_ROOT / "install"
+
+
+INSTALL_DIR = _resolve_install_dir()
 AGENT_DIR = INSTALL_DIR / "agent"
 MAAFW_BIN_DIR = INSTALL_DIR / "maafw"
 RESOURCE_DIR = PROJECT_ROOT / "assets" / "resource"

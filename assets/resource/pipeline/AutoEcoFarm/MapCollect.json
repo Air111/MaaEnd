@@ -158,17 +158,6 @@
     "__AutoEcoFarmRanchExecute": {
         "desc": "开始处理祀的画 - 牧场",
         "pre_delay": 0,
-        "action": {
-            "type": "Custom",
-            "param": {
-                "custom_action": "SubTask",
-                "custom_action_param": {
-                    "sub": [
-                        "SceneEnterWorldWulingWulingCityFangxingAvenue"
-                    ]
-                }
-            }
-        },
         "anchor": {
             "__AutoEcoFarmFindFacilityAnchor": "__AutoEcoFarmFindRanch",
             "__AutoEcoFarmStoreFacilityAnchor": "__AutoEcoFarmStoreRanch"
@@ -177,6 +166,22 @@
         "rate_limit": 0,
         "next": [
             "__AutoEcoFarmEnterSisPaintingMap"
+        ]
+    },
+    "__AutoEcoFarmRanchAfterSisFarm": {
+        // 任务选项 CollectSisPaintingFarm=Yes 时，牧场入口的 next 会被改成
+        // [本节点, __AutoEcoFarmEnterSisPaintingMap]：本节点与兜底节点在同一个
+        // next 列表里，同一张截图判定，命中时不会多一次截图或等待。
+        "desc": "祀的画农植机刚收完：已在祀的画地图、筛选与视口都还没变，跳过进图与筛选直接找牧场标记",
+        "recognition": "And",
+        "all_of": [
+            "InMapWulingSisPainting"
+        ],
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "__AutoEcoFarmFindRanch"
         ]
     },
     "__AutoEcoFarmFindRanch": {
@@ -293,26 +298,41 @@
         ]
     },
     "__AutoEcoFarmFinishRewardConfirm": {
-        "desc": "通过公共奖励子任务处理收尾奖励页，完成后关闭面板或确认已回地图",
+        "desc": "识别奖励界面下方的勾并点击关闭（不走 IMS A3），完成后关闭面板或确认已回地图",
         "recognition": "And",
         "all_of": [
-            "SceneNoticeRewardsConfirm"
+            "__AutoEcoFarmRewardPage"
         ],
+        "pre_wait_freezes": {
+            "time": 300,
+            "target": [
+                528,
+                299,
+                222,
+                131
+            ],
+            "threshold": 0.97,
+            "timeout": 1500
+        },
         "pre_delay": 0,
         "action": {
-            "type": "Custom",
-            "param": {
-                "custom_action": "SubTask",
-                "custom_action_param": {
-                    "sub": [
-                        "SceneNoticeRewardsConfirm"
-                    ]
-                }
-            }
+            "type": "Click"
+        },
+        "post_wait_freezes": {
+            "time": 400,
+            "target": [
+                500,
+                0,
+                280,
+                200
+            ],
+            "timeout": 2000
         },
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
+            "__AutoEcoFarmFinishRewardClickAgain",
+            "[JumpBack]SceneNoticeRewardsUpgrade",
             "__AutoEcoFarmFinishFacility",
             "__AutoEcoFarmFacilityClosed"
         ]
@@ -442,6 +462,75 @@
         "post_delay": 0,
         "rate_limit": 0
     },
+    "__AutoEcoFarmRewardPage": {
+        // 公共节点 SceneNoticeRewardsConfirm 的动作带 IMS A3（AddItemData），
+        // 农植机产物是 Normal:Plant，不在 A3 默认的 rewards 候选里，扫描纯属浪费；
+        // 这里只保留它的识别部分（标题图标 + 下方勾），点击由调用方完成。
+        "desc": "奖励界面（获得物品弹窗）：标题图标 + 下方勾按钮，仅识别",
+        "recognition": "And",
+        "all_of": [
+            "InNoticeRewards",
+            "CloseRewardsButton"
+        ],
+        "box_index": 1,
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0
+    },
+    // 补点节点：点勾后弹窗仍在才命中，只再点一次、不加任何等待。
+    // 和后续的收尾节点放在同一个 next 列表里，同一张截图判定走哪条路。
+    "__AutoEcoFarmRewardClickAgain": {
+        "desc": "奖励弹窗仍在：补点一次勾，回到农植机存仓冷却",
+        "recognition": "And",
+        "all_of": [
+            "__AutoEcoFarmRewardPage"
+        ],
+        "pre_delay": 0,
+        "action": {
+            "type": "Click"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "[JumpBack]SceneNoticeRewardsUpgrade",
+            "__AutoEcoFarmStoreCooldown"
+        ]
+    },
+    "__AutoEcoFarmFinishRewardClickAgain": {
+        "desc": "奖励弹窗仍在：补点一次勾，回到牧场收尾",
+        "recognition": "And",
+        "all_of": [
+            "__AutoEcoFarmRewardPage"
+        ],
+        "pre_delay": 0,
+        "action": {
+            "type": "Click"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "[JumpBack]SceneNoticeRewardsUpgrade",
+            "__AutoEcoFarmFinishFacility",
+            "__AutoEcoFarmFacilityClosed"
+        ]
+    },
+    "__AutoEcoFarmRecoverRewardClickAgain": {
+        "desc": "奖励弹窗仍在：补点一次勾，回到失败恢复收尾",
+        "recognition": "And",
+        "all_of": [
+            "__AutoEcoFarmRewardPage"
+        ],
+        "pre_delay": 0,
+        "action": {
+            "type": "Click"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "__AutoEcoFarmRecoverClosePanel",
+            "__AutoEcoFarmFacilityClosed"
+        ]
+    },
     "__AutoEcoFarmStoreButton": {
         "desc": "按完整文字识别存仓按钮",
         "recognition": {
@@ -492,38 +581,53 @@
         ]
     },
     "__AutoEcoFarmRewardConfirm": {
-        "desc": "通过公共奖励子任务处理奖励页，完成后检查同一装置的新产出",
+        "desc": "识别奖励界面下方的勾并点击关闭（不走 IMS A3），完成后检查同一装置的新产出",
         "recognition": "And",
         "all_of": [
-            "SceneNoticeRewardsConfirm"
+            "__AutoEcoFarmRewardPage"
         ],
+        "pre_wait_freezes": {
+            "time": 300,
+            "target": [
+                528,
+                299,
+                222,
+                131
+            ],
+            "threshold": 0.97,
+            "timeout": 1500
+        },
         "pre_delay": 0,
         "action": {
-            "type": "Custom",
-            "param": {
-                "custom_action": "SubTask",
-                "custom_action_param": {
-                    "sub": [
-                        "SceneNoticeRewardsConfirm"
-                    ]
-                }
-            }
+            "type": "Click"
+        },
+        "post_wait_freezes": {
+            "time": 400,
+            "target": [
+                500,
+                0,
+                280,
+                200
+            ],
+            "timeout": 2000
         },
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
+            "__AutoEcoFarmRewardClickAgain",
+            "[JumpBack]SceneNoticeRewardsUpgrade",
             "__AutoEcoFarmStoreCooldown"
         ]
     },
     "__AutoEcoFarmStoreCooldown": {
-        "desc": "存仓奖励关闭后等待 5 秒",
+        "desc": "存仓奖励关闭后等待 3 秒",
         "pre_delay": 0,
         "action": {
             "type": "Custom",
             "param": {
                 "custom_action": "CountDownAction",
                 "custom_action_param": {
-                    "duration": 5,
+                    "duration": 3,
                     "duration_type": 1
                 }
             }
@@ -578,26 +682,29 @@
         ]
     },
     "__AutoEcoFarmRecoverRewardPage": {
-        "desc": "收掉残留的奖励页",
+        "desc": "收掉残留的奖励页（不走 IMS A3）",
         "recognition": "And",
         "all_of": [
-            "SceneNoticeRewardsConfirm"
+            "__AutoEcoFarmRewardPage"
         ],
         "pre_delay": 0,
         "action": {
-            "type": "Custom",
-            "param": {
-                "custom_action": "SubTask",
-                "custom_action_param": {
-                    "sub": [
-                        "SceneNoticeRewardsConfirm"
-                    ]
-                }
-            }
+            "type": "Click"
+        },
+        "post_wait_freezes": {
+            "time": 400,
+            "target": [
+                500,
+                0,
+                280,
+                200
+            ],
+            "timeout": 2000
         },
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
+            "__AutoEcoFarmRecoverRewardClickAgain",
             "__AutoEcoFarmRecoverClosePanel",
             "__AutoEcoFarmFacilityClosed"
         ]

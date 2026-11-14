@@ -327,6 +327,137 @@
             "Node.Recognition.Succeeded": "$task.EnvironmentMonitoring.not_adapted"
         }
     },
+    "RainbowGoTarget": {
+        "desc": "判断是否使用保存的滑索路径前往彩虹；没有保存路径时走原有传送流程",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                214.61,
+                145.62
+            ],
+            "zip_move": "RainbowMoveWithZipline",
+            "fallback": "GoToRainbow"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "RainbowMoveWithZipline",
+            "GoToRainbowMove"
+        ]
+    },
+    "RainbowGoTargetAfterTrack": {
+        "desc": "刚点击追踪，判断是否使用保存的滑索路径前往彩虹",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                214.61,
+                145.62
+            ],
+            "zip_move": "RainbowMoveWithZipline",
+            "fallback": "RainbowInQuickTeleportMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "RainbowMoveWithZipline",
+            "GoToRainbowMove"
+        ]
+    },
+    "RainbowGoTargetAfterTracked": {
+        "desc": "任务已在追踪中，判断是否使用保存的滑索路径前往彩虹",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                214.61,
+                145.62
+            ],
+            "zip_move": "RainbowMoveWithZipline",
+            "fallback": "RainbowOpenTrackedMissionMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "RainbowMoveWithZipline",
+            "GoToRainbowMove"
+        ]
+    },
+    "RainbowMoveWithZipline": {
+        "desc": "沿保存的滑索路径前往彩虹",
+        // 只有 ZiplineRouteGoAction 命中手工链时才打开；默认禁用，保证没有保存路径时不启用滑索。
+        "enabled": false,
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "MapNavigateAction",
+        "custom_action_param": {
+            "path": [
+                {
+                    "action": "ZONE",
+                    "zone_id": "Wuling_L4_328"
+                },
+                {
+                    "action": "NAVMESH",
+                    "target": [
+                        243.65,
+                        182.44
+                    ],
+                    "target_tier": "Wuling_L4_328"
+                },
+                {
+                    "action": "RUN",
+                    "target": [
+                        243.5,
+                        178.04
+                    ],
+                    "target_tier": "Wuling_L4_328"
+                },
+                {
+                    "action": "NAVMESH",
+                    "target": [
+                        214.61,
+                        145.62
+                    ],
+                    "target_tier": "Wuling_L4_328"
+                },
+                {
+                    "action": "HEADING",
+                    "angle": 260
+                }
+            ],
+            "zip": true
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "RainbowTakePhoto"
+        ],
+        // 滑索导航失败时退回同一目标点的步行路线。
+        "on_error": [
+            "GoToRainbowMove"
+        ],
+        "focus": {
+            "Node.Action.Succeeded": {
+                "trace": true
+            },
+            "Node.Action.Failed": {
+                "trace": true
+            }
+        }
+    },
+    "RainbowTeleportDone": {
+        "desc": "传送流程结束，交回目标点决策节点继续",
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0
+    },
     "GoToRainbow": {
         "desc": "前往彩虹，先回到大世界再进行判断",
         "pre_delay": 0,
@@ -389,7 +520,7 @@
             "path": [
                 {
                     "action": "ZONE",
-                    "zone_id": "Wuling_L4_328"
+                    "zone_id": "Wuling_Base"
                 },
                 {
                     "action": "NAVMESH",
@@ -444,7 +575,7 @@
             "path": [
                 {
                     "action": "ZONE",
-                    "zone_id": "Wuling_L4_328"
+                    "zone_id": "Wuling_Base"
                 },
                 {
                     "action": "NAVMESH",

@@ -64,6 +64,8 @@ description: MaaEnd 自动寻路、地图定位、角色移动与路径导航开
 
 滑索是对作者路线的局部替换，路线不写 `zip` 也会考虑，写 `zip: false` 才关。展开时按边界把路线切段，每段先照作者路线展开当步行基线，滑索比基线省下 `min_gain` 以上才把这段的走路整段换掉；不划算时这段与不开滑索逐点一致。
 
+手工滑索链（编辑器 `滑索路线` 页保存到 `debug/record/ZiplineRoutes.json`）按 `(账号, 区, 终点)` 命中时整段替换，不再与步行比代价；链首走不到或某跳已失败时回退自动查找。链上的「自动终点」存为 `e_hops`，勾 `i→i+1` 就是把**塔 i 的自动终点设成塔 i+1**：E 的本质是这个设置，所以**不管从哪根塔滑向塔 i（哪怕从塔 i+1 滑回来）都会弹 E 提示，按下去目的地永远是塔 i+1**；没设终点的塔不弹。索本身双向，站在任一端「前往」都能坐过去，回程不需要 E。一次滑行能连按几次 E，由从这一跳起**连续**勾选的跳数决定（`.TTTTTTT.TTTTT` 是两段，各自从「点击前往」开始时单独计数），且只数确认成功的按键，同一个 E 的失败重试不计入。
+
 `ZONE`、除 `RUN` / `NAVMESH` 外的所有动作点、写了 `required: true` 的 `RUN` / `NAVMESH` 点都是段边界，滑索不会跨过，动作照常执行。所以动作点不需要 `required`；只有必须经过的 `RUN` / `NAVMESH` 点才写。
 
 某个 `NAVMESH` 点纯步行不可达时，仍会尝试用一条连续滑索链桥接起终两侧可走面；桥接成功优先于盲走兜底。纯步行可达时才按区间成本与收益门槛比较，不能简单按滑索跳数给固定优先级。
@@ -106,6 +108,7 @@ description: MaaEnd 自动寻路、地图定位、角色移动与路径导航开
 
 - `web/serve.py`：FastAPI 后端，托管静态站点并提供寻路 / 导入导出 / 录制 WebSocket 接口；
 - `web/static/`：浏览器前端（原生 JS + JSDoc + WebGL，ESM 模块，零构建）；
+- `web/static/zipline_routes.html` 与 `web/static/js/zipline_routes.js`：按地区-目标点编辑手工滑索链的独立页面，保存到 `install/debug/record/ZiplineRoutes.json`，运行时由 cpp-algo 直接采用；
 - `navmesh_backend.py`：navmesh 查询后端，把 cpp-algo agent 当作常驻查询进程，几何解码 / 吸附 / 路线都在 agent 里算；
 - `connectors.py` / `connection_models.py`：Win32 / ADB / PlayCover 录制连接层；
 - `agent_session.py`：cpp Agent + Tasker 的生命周期，录制 / 试跑 / 单次定位 / navmesh 查询共用；
@@ -138,12 +141,11 @@ MapNavigator 的位置输入完全来自 MapLocator 的逐帧识别结果。**�
 
 ### 日志改动要同步日志分析工具
 
-`tools/MapNavigator` 的 `日志分析` 按固定子串匹配 cpp-algo 日志行（行头函数名、消息文本、`[key=value]` 字段）来还原实测轨迹、规划决策和滑索跳，任一处变化都会让它静默失效：拆分 `PositionProvider::Capture` 就曾让实测地面轨迹整段消失，而 `test_log_analysis.mjs` 用的是手写日志片段，不会替你发现真实日志的漂移。
+`tools/MapNavigator` 的 `日志分析` 按固定子串匹配 cpp-algo 日志行（行头函数名、消息文本、`[key=value]` 字段）来还原实测轨迹、规划决策和滑索跳，任一处变化都会让它静默失效：拆分 `PositionProvider::Capture` 就曾让实测地面轨迹整段消失。
 
 改动 MapNavigator / MapLocator 的日志输出（增删改日志行、调整 `VAR(...)` 字段、把日志挪进别的函数或改名）时，即使用户没有提出要求，也主动提醒用户同步：
 
 - `tools/MapNavigator/web/static/js/log_analysis.js` 的解析逻辑；
-- `tools/MapNavigator/web/test_log_analysis.mjs` 的回归用例；
 - `docs/zh_cn/developers/components/map-navigator.md`、`docs/en_us/` 对应文档和 `tools/MapNavigator/README.md` 中的日志分析描述。
 
 ### C++ 编码规范
