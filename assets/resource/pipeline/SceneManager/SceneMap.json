@@ -545,6 +545,39 @@
         ],
         "post_wait_freezes": 200
     },
+    "__ScenePrivateTaskTrackedMissionEnterMap": {
+        "desc": "在任务追踪详情页点击定位图标，进入带前往传送按钮的任务地图",
+        "recognition": "And",
+        "all_of": [
+            "TrackedMissionMapButton"
+        ],
+        "pre_delay": 0,
+        "action": "Click",
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "__ScenePrivateTaskTrackedMapEnterMapOverview"
+        ]
+    },
+    "__ScenePrivateTaskTrackedMapEnterMapOverview": {
+        "desc": "在任务追踪地图按一次返回，再从地图总览重新选择区域，重置地图缩放",
+        "recognition": "And",
+        "all_of": [
+            "QuickTeleportButton"
+        ],
+        "pre_delay": 0,
+        "action": {
+            "type": "ClickKey",
+            "param": {
+                "key": 27
+            }
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "__ScenePrivateMapAnyEnterMapOverview"
+        ]
+    },
     "__ScenePrivateWorldEnterMapAny": {
         "desc": "在大世界界面，进入地图界面",
         "recognition": "And",
