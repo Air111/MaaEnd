@@ -568,45 +568,6 @@ void append_pulled_corners(
     }
 }
 
-// 与 Navmesh/RecastNavRoute.cpp 的 kDeckPullMaxHeightDelta 对齐: 小于这段高度差
-// 视为同一层内的台阶, 超过才当作换层.
-constexpr double kDeckTransitionHeightDelta = 3.0;
-
-// 航点跟踪只按 x/y 投影, 叠层处会把下一层的点当成已经走过. 只给保存路径的离索段
-// 把换层点标严判: 换层前后的点必须实际到达, 否则路线会在上层一路走到二维终点.
-void mark_deck_transitions_strict(std::vector<Waypoint>* out_path, size_t begin)
-{
-    std::optional<double> layer_height;
-    if (begin > 0) {
-        layer_height = (*out_path)[begin - 1].route_floor_y ? (*out_path)[begin - 1].route_floor_y
-                                                            : (*out_path)[begin - 1].target_deck_y;
-    }
-    for (size_t index = begin; index < out_path->size(); ++index) {
-        Waypoint& waypoint = (*out_path)[index];
-        if (!waypoint.route_floor_y) {
-            continue;
-        }
-        if (!layer_height) {
-            layer_height = waypoint.route_floor_y;
-            continue;
-        }
-        if (std::abs(*waypoint.route_floor_y - *layer_height) <= kDeckTransitionHeightDelta) {
-            continue;
-        }
-        const double previous_height = *layer_height;
-        layer_height = waypoint.route_floor_y;
-        // 换层前后的两个点都别让二维跟踪提前消费: 上层的点在楼下那层的投影里可能已经"走过".
-        if (index > begin && (*out_path)[index - 1].action == ActionType::RUN) {
-            (*out_path)[index - 1].strict_arrival = true;
-        }
-        if (waypoint.action == ActionType::RUN) {
-            waypoint.strict_arrival = true;
-            LogInfo << "Saved zipline departure waypoints pinned to their decks at a layer transition." << VAR(index)
-                    << VAR(waypoint.x) << VAR(waypoint.y) << VAR(previous_height) << VAR(*layer_height);
-        }
-    }
-}
-
 bool append_generated_waypoints(
     std::vector<Waypoint>* out_path,
     const navmesh::WorldPath& world_path,
@@ -618,7 +579,6 @@ bool append_generated_waypoints(
         return false;
     }
 
-    const size_t output_begin = out_path->size();
     size_t last_anchor = 0;
     const size_t total = world_path.points.size();
     const size_t loop_end = options.include_goal ? total : total - 1;
@@ -646,9 +606,6 @@ bool append_generated_waypoints(
         }
     }
 
-    if (options.mark_deck_transitions) {
-        mark_deck_transitions_strict(out_path, output_begin);
-    }
     return true;
 }
 
@@ -812,7 +769,6 @@ void append_hop_waypoints(
         ZiplineHopPlan hop_plan;
         hop_plan.mount = from_ref;
         hop_plan.landing = to_ref;
-        hop_plan.saved_route = route.saved_route;
         hop_plan.planned_elevation_deg = CalcElevation(from_ref, to_ref);
         if (hop == 0) {
             for (const navmesh::WorldPoint& spot : route.mount_spots) {
@@ -858,12 +814,7 @@ void append_departure(
     const ZiplineNodeRef dismount = (*out_path)[last_hop_index].zipline_hop->landing;
     const size_t departure_index = out_path->size();
     const navmesh::WorldPoint landing = route.departure.points.back();
-    append_generated_waypoints(
-        out_path,
-        route.departure,
-        { .mark_deck_transitions = route.saved_route },
-        ctx.mesh,
-        route.departure.zone_id);
+    append_generated_waypoints(out_path, route.departure, {}, ctx.mesh, route.departure.zone_id);
     if (out_path->size() == departure_index) {
         out_path->push_back(Waypoint { .x = landing.x, .y = landing.y, .action = ActionType::RUN });
         out_path->back().strict_arrival = true;
