@@ -842,7 +842,8 @@ std::optional<double> try_append_zipline_leg(
     std::vector<Waypoint>* out_path,
     const ProjectedTarget& target,
     std::optional<double> baseline_cost,
-    bool saved_route_only = false)
+    bool saved_route_only = false,
+    bool include_departure = true)
 {
     auto route = PlanZiplineRoute(
         ctx->zipline_outcome,
@@ -875,9 +876,16 @@ std::optional<double> try_append_zipline_leg(
     // 架子坐标是角格锚点, 走到跟前常碰不到设备, 所以头一跳瞄第一个站位
     const navmesh::WorldPoint mount_spot = route->mount_spots.empty() ? mount : route->mount_spots.front();
     append_hop_waypoints(out_path, *route, mount_spot);
-    append_departure(out_path, *ctx, *route, target);
-
-    move_route_start(state, route->departure.points.back());
+    if (include_departure) {
+        append_departure(out_path, *ctx, *route, target);
+        move_route_start(state, route->departure.points.back());
+    }
+    else {
+        // 保存路径只负责到落塔; 下索后的步行交回普通 NAVMESH 展开, 不能把 departure 也塞进来.
+        move_route_start(state, route->departure.points.back());
+        state->route_start_floor_y = route->towers.back().height;
+        state->route_start_deck_y = route->towers.back().height;
+    }
     if (ctx->diagnostics != nullptr) {
         ctx->diagnostics->insert(
             ctx->diagnostics->end(),
@@ -1195,8 +1203,9 @@ bool append_span_tail(ExpansionContext* ctx, LegState* state, std::vector<Waypoi
     return true;
 }
 
-// 保存的滑索路径只按 (区, 终点) 命中, 命中后上下索两段都由它定, 不必先把整段走路规划出来当基线;
-// 没命中或走不通时返回 nullopt, 由调用方照作者路线照常展开
+// 保存的滑索路径只按 (区, 终点) 命中, 命中后只负责入口/塔链/落塔; 落塔后从实际落点
+// 按作者 NAVMESH 目标重新走普通步行, 不再拼 departure. 没命中或走不通时返回 nullopt,
+// 由调用方照作者路线照常展开.
 std::optional<double> append_saved_zipline_span(
     ExpansionContext* ctx,
     LegState* state,
@@ -1213,7 +1222,8 @@ std::optional<double> append_saved_zipline_span(
     const size_t output_begin = out_path->size();
     LegState shortcut_state = *state;
     std::vector<Waypoint> shortcut;
-    const std::optional<double> cost = try_append_zipline_leg(ctx, &shortcut_state, &shortcut, target, std::nullopt, true);
+    // 保存路径只规划到落塔; 落塔后的步行由下面照作者目标重新走普通 NAVMESH.
+    const std::optional<double> cost = try_append_zipline_leg(ctx, &shortcut_state, &shortcut, target, std::nullopt, true, false);
     if (!cost) {
         return std::nullopt;
     }
@@ -1221,7 +1231,33 @@ std::optional<double> append_saved_zipline_span(
     out_path->insert(out_path->end(), std::make_move_iterator(shortcut.begin()), std::make_move_iterator(shortcut.end()));
     stamp_authored_group(out_path, output_begin, begin);
     *state = shortcut_state;
-    LogInfo << "Zipline planned the saved path on its own, the walk was never expanded." << VAR(begin) << VAR(end)
+    // 目标可能是一个动作点（例如 NAVMESH 后的 INTERACT）；普通步行要走到它前面最后一个移动点.
+    size_t walk_target_index = target_index;
+    while (walk_target_index > begin && !IsMovementPoint(ctx->param->path[walk_target_index])) {
+        --walk_target_index;
+    }
+    if (walk_target_index < ctx->param->path.size() && IsMovementPoint(ctx->param->path[walk_target_index])
+        && !append_stamped_authored_waypoint(ctx, state, out_path, walk_target_index)) {
+        return std::nullopt;
+    }
+    // 下索后的普通步行已经追加, 用它补回最后一跳的 exit_aim.
+    size_t last_hop = out_path->size();
+    for (size_t index = output_begin; index < out_path->size(); ++index) {
+        if ((*out_path)[index].action == ActionType::ZIPLINE && (*out_path)[index].zipline_hop) {
+            last_hop = index;
+        }
+    }
+    if (last_hop < out_path->size()) {
+        const ZiplineNodeRef dismount = (*out_path)[last_hop].zipline_hop->landing;
+        const std::optional<ZiplineMountSpot> exit_aim = pick_exit_aim_point(*out_path, last_hop + 1, dismount);
+        (*out_path)[last_hop].zipline_hop->exit_aim = exit_aim;
+        for (Waypoint& waypoint : *out_path) {
+            if (waypoint.action == ActionType::ZIPLINE && waypoint.zipline_hop) {
+                waypoint.zipline_hop->e_exit_aim = exit_aim;
+            }
+        }
+    }
+    LogInfo << "Zipline saved path reused normal walking after landing." << VAR(begin) << VAR(end)
             << VAR(target_index) << VAR(out_path->size() - output_begin);
     if (!append_span_tail(ctx, state, out_path, target_index, end)) {
         return std::nullopt;
