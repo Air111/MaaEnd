@@ -570,6 +570,45 @@ void append_pulled_corners(
     }
 }
 
+// 与 Navmesh/RecastNavRoute.cpp 的 kDeckPullMaxHeightDelta 对齐: 小于这段高度差
+// 视为同一层内的台阶, 超过才当作换层.
+constexpr double kDeckTransitionHeightDelta = 3.0;
+
+// 航点跟踪只按 x/y 投影, 叠层处会把下一层的点当成已经走过. 只给保存路径的离索段
+// 把换层点标严判: 换层前后的点必须实际到达, 否则路线会在上层一路走到二维终点.
+void mark_deck_transitions_strict(std::vector<Waypoint>* out_path, size_t begin)
+{
+    std::optional<double> layer_height;
+    if (begin > 0) {
+        layer_height = (*out_path)[begin - 1].route_floor_y ? (*out_path)[begin - 1].route_floor_y
+                                                            : (*out_path)[begin - 1].target_deck_y;
+    }
+    for (size_t index = begin; index < out_path->size(); ++index) {
+        Waypoint& waypoint = (*out_path)[index];
+        if (!waypoint.route_floor_y) {
+            continue;
+        }
+        if (!layer_height) {
+            layer_height = waypoint.route_floor_y;
+            continue;
+        }
+        if (std::abs(*waypoint.route_floor_y - *layer_height) <= kDeckTransitionHeightDelta) {
+            continue;
+        }
+        const double previous_height = *layer_height;
+        layer_height = waypoint.route_floor_y;
+        // 换层前后的两个点都别让二维跟踪提前消费: 上层的点在楼下那层的投影里可能已经"走过".
+        if (index > begin && (*out_path)[index - 1].action == ActionType::RUN) {
+            (*out_path)[index - 1].strict_arrival = true;
+        }
+        if (waypoint.action == ActionType::RUN) {
+            waypoint.strict_arrival = true;
+            LogInfo << "Saved zipline departure waypoints pinned to their decks at a layer transition." << VAR(index)
+                    << VAR(waypoint.x) << VAR(waypoint.y) << VAR(previous_height) << VAR(*layer_height);
+        }
+    }
+}
+
 bool append_generated_waypoints(
     std::vector<Waypoint>* out_path,
     const navmesh::WorldPath& world_path,
@@ -581,6 +620,7 @@ bool append_generated_waypoints(
         return false;
     }
 
+    const size_t output_begin = out_path->size();
     size_t last_anchor = 0;
     const size_t total = world_path.points.size();
     const size_t loop_end = options.include_goal ? total : total - 1;
@@ -608,6 +648,9 @@ bool append_generated_waypoints(
         }
     }
 
+    if (options.mark_deck_transitions) {
+        mark_deck_transitions_strict(out_path, output_begin);
+    }
     return true;
 }
 
@@ -771,6 +814,7 @@ void append_hop_waypoints(
         ZiplineHopPlan hop_plan;
         hop_plan.mount = from_ref;
         hop_plan.landing = to_ref;
+        hop_plan.saved_route = route.saved_route;
         hop_plan.planned_elevation_deg = CalcElevation(from_ref, to_ref);
         if (hop == 0) {
             for (const navmesh::WorldPoint& spot : route.mount_spots) {
@@ -819,7 +863,12 @@ void append_departure(
     const ZiplineNodeRef dismount = (*out_path)[last_hop_index].zipline_hop->landing;
     const size_t departure_index = out_path->size();
     const navmesh::WorldPoint landing = route.departure.points.back();
-    append_generated_waypoints(out_path, route.departure, {}, ctx.mesh, route.departure.zone_id);
+    append_generated_waypoints(
+        out_path,
+        route.departure,
+        { .mark_deck_transitions = route.saved_route },
+        ctx.mesh,
+        route.departure.zone_id);
     if (out_path->size() == departure_index) {
         out_path->push_back(Waypoint { .x = landing.x, .y = landing.y, .action = ActionType::RUN });
         out_path->back().strict_arrival = true;
@@ -845,8 +894,7 @@ std::optional<double> try_append_zipline_leg(
     std::vector<Waypoint>* out_path,
     const ProjectedTarget& target,
     std::optional<double> baseline_cost,
-    bool saved_route_only = false,
-    bool include_departure = true)
+    bool saved_route_only = false)
 {
     auto route = PlanZiplineRoute(
         ctx->zipline_outcome,
@@ -890,16 +938,8 @@ std::optional<double> try_append_zipline_leg(
     }
     const navmesh::WorldPoint& first_hop_waypoint = start_at_mount ? state->route_start : mount_spot;
     append_hop_waypoints(out_path, *route, first_hop_waypoint);
-    if (include_departure) {
-        append_departure(out_path, *ctx, *route, target);
-        move_route_start(state, route->departure.points.back());
-    }
-    else {
-        // 保存路径只负责到落塔; 下索后的步行交回普通 NAVMESH 展开, 不能把 departure 也塞进来.
-        move_route_start(state, route->departure.points.back());
-        state->route_start_floor_y = route->towers.back().height;
-        state->route_start_deck_y = route->towers.back().height;
-    }
+    append_departure(out_path, *ctx, *route, target);
+    move_route_start(state, route->departure.points.back());
     if (ctx->diagnostics != nullptr) {
         ctx->diagnostics->insert(
             ctx->diagnostics->end(),
@@ -1217,9 +1257,8 @@ bool append_span_tail(ExpansionContext* ctx, LegState* state, std::vector<Waypoi
     return true;
 }
 
-// 保存的滑索路径只按 (区, 终点) 命中, 命中后只负责入口/塔链/落塔; 落塔后从实际落点
-// 按作者 NAVMESH 目标重新走普通步行, 不再拼 departure. 没命中或走不通时返回 nullopt,
-// 由调用方照作者路线照常展开.
+// 保存的滑索路径只按 (区, 终点) 命中, 命中后只计算上索段和下索段, 不展开步行基线;
+// 没命中或走不通时返回 nullopt, 由调用方照作者路线照常展开.
 std::optional<double> append_saved_zipline_span(
     ExpansionContext* ctx,
     LegState* state,
@@ -1236,8 +1275,7 @@ std::optional<double> append_saved_zipline_span(
     const size_t output_begin = out_path->size();
     LegState shortcut_state = *state;
     std::vector<Waypoint> shortcut;
-    // 保存路径只规划到落塔; 落塔后的步行由下面照作者目标重新走普通 NAVMESH.
-    const std::optional<double> cost = try_append_zipline_leg(ctx, &shortcut_state, &shortcut, target, std::nullopt, true, false);
+    const std::optional<double> cost = try_append_zipline_leg(ctx, &shortcut_state, &shortcut, target, std::nullopt, true);
     if (!cost) {
         return std::nullopt;
     }
@@ -1245,33 +1283,7 @@ std::optional<double> append_saved_zipline_span(
     out_path->insert(out_path->end(), std::make_move_iterator(shortcut.begin()), std::make_move_iterator(shortcut.end()));
     stamp_authored_group(out_path, output_begin, begin);
     *state = shortcut_state;
-    // 目标可能是一个动作点（例如 NAVMESH 后的 INTERACT）；普通步行要走到它前面最后一个移动点.
-    size_t walk_target_index = target_index;
-    while (walk_target_index > begin && !IsMovementPoint(ctx->param->path[walk_target_index])) {
-        --walk_target_index;
-    }
-    if (walk_target_index < ctx->param->path.size() && IsMovementPoint(ctx->param->path[walk_target_index])
-        && !append_stamped_authored_waypoint(ctx, state, out_path, walk_target_index)) {
-        return std::nullopt;
-    }
-    // 下索后的普通步行已经追加, 用它补回最后一跳的 exit_aim.
-    size_t last_hop = out_path->size();
-    for (size_t index = output_begin; index < out_path->size(); ++index) {
-        if ((*out_path)[index].action == ActionType::ZIPLINE && (*out_path)[index].zipline_hop) {
-            last_hop = index;
-        }
-    }
-    if (last_hop < out_path->size()) {
-        const ZiplineNodeRef dismount = (*out_path)[last_hop].zipline_hop->landing;
-        const std::optional<ZiplineMountSpot> exit_aim = pick_exit_aim_point(*out_path, last_hop + 1, dismount);
-        (*out_path)[last_hop].zipline_hop->exit_aim = exit_aim;
-        for (Waypoint& waypoint : *out_path) {
-            if (waypoint.action == ActionType::ZIPLINE && waypoint.zipline_hop) {
-                waypoint.zipline_hop->e_exit_aim = exit_aim;
-            }
-        }
-    }
-    LogInfo << "Zipline saved path reused normal walking after landing." << VAR(begin) << VAR(end)
+    LogInfo << "Zipline planned the saved path on its own, the walk was never expanded." << VAR(begin) << VAR(end)
             << VAR(target_index) << VAR(out_path->size() - output_begin);
     if (!append_span_tail(ctx, state, out_path, target_index, end)) {
         return std::nullopt;

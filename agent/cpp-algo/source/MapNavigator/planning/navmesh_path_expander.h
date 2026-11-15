@@ -79,6 +79,8 @@ struct GeneratedWaypointOptions
 {
     bool include_goal = true;
     bool strict_segment_breaks = true;
+    // 只有保存路径的离索段需要: 换层点前后标严判, 避免二维跟踪跨层跳过
+    bool mark_deck_transitions = false;
 };
 
 bool AppendGeneratedNavmeshWaypoints(
