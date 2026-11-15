@@ -423,12 +423,18 @@ jobs:
           name: MaaEnd-${{ matrix.os }}-${{ matrix.arch }}-intermediate
           path: install
 
+      # agent 产物保留 install/agent 的目录结构, 解压后可直接覆盖安装目录.
+      # 这些二进制每次构建都会因版本戳/PE 时间戳变化, 所以不再重复放进增量包.
+      - name: Stage agent artifact
+        shell: bash
+        run: |
+          mkdir -p agent-artifact/agent
+          cp -a install/agent/. agent-artifact/agent/
+
       - uses: actions/upload-artifact@v6
         with:
-          name: cpp-algo-${{ matrix.os }}-${{ matrix.arch }}
-          path: |
-            install/agent/cpp-algo*
-            install/agent/WebView2Loader.dll
+          name: agent-${{ matrix.os }}-${{ matrix.arch }}
+          path: agent-artifact
           retention-days: 90
 
       # 云游戏外壳只有 Windows 会构建（其他平台的 install/cloud-shell 不存在），
@@ -503,6 +509,7 @@ jobs:
             --old prev-install \
             --new install \
             --out patch \
+            --exclude agent \
             --empty-marker no-changes.zip
           prev_tag=$(uv run python -c 'import json; print(json.load(open("prev-install/interface.json", encoding="utf-8"))["version"])')
           cur_tag=$(uv run python -c 'import json; print(json.load(open("install/interface.json", encoding="utf-8"))["version"])')

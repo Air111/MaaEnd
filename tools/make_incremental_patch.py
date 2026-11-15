@@ -2,13 +2,17 @@
 """Build an overlay patch between two MaaEnd install trees.
 
 Usage (in CI):
-    uv run tools/make_incremental_patch.py --old prev-install --new install --out patch
+    uv run tools/make_incremental_patch.py --old prev-install --new install --out patch --exclude agent
 
 The patch directory keeps the install-relative layout, so extracting it over an
 existing install updates added/modified files. Deleted files are handled only
 when they actually exist: `_deleted-files.txt` and `_delete-old-files.ps1` are
 written into the patch root. Run the script against the install directory before
 or after copying the overlay, then remove the two helper files.
+
+Paths passed to --exclude (for example `agent`) are ignored on both sides of the
+comparison, including deletions. This keeps large rebuild-only binaries out of
+the overlay; they are shipped separately.
 """
 
 from __future__ import annotations
@@ -80,7 +84,7 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def scan(root: Path) -> dict[str, tuple[int, str]]:
+def scan(root: Path, excluded_prefixes: tuple[str, ...] = ()) -> dict[str, tuple[int, str]]:
     """Return {posix-relative-path: (size, sha256)} for release files."""
     result: dict[str, tuple[int, str]] = {}
     for dirpath, dirnames, filenames in os.walk(root):
@@ -98,6 +102,8 @@ def scan(root: Path) -> dict[str, tuple[int, str]]:
             if not path.is_file():
                 continue
             rel = path.relative_to(root).as_posix()
+            if any(rel == prefix or rel.startswith(prefix + "/") for prefix in excluded_prefixes):
+                continue
             result[rel] = (path.stat().st_size, sha256(path))
     return result
 
@@ -125,6 +131,13 @@ def main() -> int:
     parser.add_argument("--new", type=Path, required=True, help="new install tree")
     parser.add_argument("--out", type=Path, required=True, help="patch output directory")
     parser.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="install-relative file or directory to leave out of the diff (repeatable)",
+    )
+    parser.add_argument(
         "--empty-marker",
         default=EMPTY_MARKER_NAME,
         help=(
@@ -136,6 +149,13 @@ def main() -> int:
 
     if args.empty_marker and Path(args.empty_marker).name != args.empty_marker:
         parser.error("--empty-marker must be a file name, not a path")
+
+    excluded_prefixes: list[str] = []
+    for value in args.exclude:
+        prefix = value.replace("\\", "/").strip("/")
+        if not prefix or any(part in {"", ".", ".."} for part in prefix.split("/")):
+            parser.error(f"--exclude must be an install-relative path: {value!r}")
+        excluded_prefixes.append(prefix)
 
     old_dir = args.old.resolve()
     new_dir = args.new.resolve()
@@ -149,8 +169,9 @@ def main() -> int:
     if old_dir in out_dir.parents or new_dir in out_dir.parents:
         parser.error("--out must not be inside --old or --new")
 
-    old_files = scan(old_dir)
-    new_files = scan(new_dir)
+    excluded = tuple(dict.fromkeys(excluded_prefixes))
+    old_files = scan(old_dir, excluded)
+    new_files = scan(new_dir, excluded)
 
     old_set = set(old_files)
     new_set = set(new_files)
