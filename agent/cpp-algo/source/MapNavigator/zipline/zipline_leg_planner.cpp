@@ -994,7 +994,8 @@ std::optional<PlannedLeg> plan_departure(const PlanInputs& in, const TowerSites&
         {
             .start = sites.spots[spot],
             .start_floor_y = sites.nodes[sites.spot_tower[spot]].height,
-                        .goal = in.request.goal,
+            .start_deck_y = sites.nodes[sites.spot_tower[spot]].height,
+            .goal = in.request.goal,
             .goal_floor_y = in.request.goal_floor_y,
             .goal_deck_y = in.request.goal_deck_y,
             .zone_floor_y = in.request.zone_floor_y,
