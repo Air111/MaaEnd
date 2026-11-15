@@ -1107,12 +1107,23 @@ void pull_waypoints(
     }
     // 一次拉直最多吞掉的顶点数, 只为限制成本
     constexpr size_t kMaxPullSpan = 64;
+    // 叠层处不能把换层段拉直: 上一层的连续面也能过, 到终点才掉层, 而到达判定只看二维.
+    // 面高优先用搜索选中的 span_height, 它才代表 A* 实际走的那一层.
+    constexpr double kDeckPullMaxHeightDelta = 3.0;
+    const std::vector<double>* deck_heights = nullptr;
+    if (dg->span_height.size() == pts.size()) {
+        deck_heights = &dg->span_height;
+    }
+    else if (dg->height.size() == pts.size()) {
+        deck_heights = &dg->height;
+    }
     const size_t anchor = pts.size() - 1;
     size_t cursor = 0;
     while (cursor + 1 < anchor) {
         // 捷径不得比它吞掉的最窄处更窄
         double swallowed = std::numeric_limits<double>::infinity();
-        const std::optional<double> seed = cursor < dg->height.size() ? std::optional<double>(dg->height[cursor]) : std::nullopt;
+        const std::optional<double> seed =
+            deck_heights != nullptr ? std::optional<double>((*deck_heights)[cursor]) : std::nullopt;
         size_t reach = cursor;
         size_t reach_limit = std::min(anchor, cursor + kMaxPullSpan);
         // 台沿下落的落点必须留成航点, 控制端靠它判下落
@@ -1124,6 +1135,10 @@ void pull_waypoints(
         while (reach < reach_limit) {
             const WorldPoint& a = pts[cursor];
             const WorldPoint& c = pts[reach + 1];
+            if (deck_heights != nullptr && reach + 1 < deck_heights->size()
+                && std::abs((*deck_heights)[reach + 1] - (*deck_heights)[cursor]) > kDeckPullMaxHeightDelta) {
+                break;
+            }
             const double required = std::isfinite(swallowed) ? swallowed : 0.0;
             if (!IsRouteSegmentDrivable(pl, pack, zid, a, c, required, seed) || SegmentBlocked(blk, a, c)) {
                 break;
