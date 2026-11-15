@@ -445,10 +445,10 @@ jobs:
           name: cloud-shell-${{ matrix.os }}-${{ matrix.arch }}
           path: install/cloud-shell
 
-      # fork 预览专用：额外生成“上一份成功 intermediate → 本次”的覆盖补丁。
-      # 全量 artifact 始终保留，补丁失败不影响全量；官方仓库已有 MirrorChyan 服务端
-      # 增量，这里只在 fork（owner != MaaEnd）跑，避免每次构建多下载 328 MB。
-      # 两次构建无文件差异时仍上传一个空的 no-changes.zip，artifact 名带 -no-changes。
+      # fork 预览专用：从“上一份成功 intermediate → 本次”的一次文件比较中拆出
+      # agent 增量、无 agent 补丁、完整补丁三份产物；全量 artifact 始终保留。
+      # 官方仓库已有 MirrorChyan 服务端增量，这里只在 fork（owner != MaaEnd）跑，
+      # 避免每次构建多下载 328 MB。某一份没有变化时仍上传 no-changes.zip marker。
       - name: Resolve previous intermediate artifact
         id: previous
         if: matrix.os == 'win' && matrix.arch == 'x86_64' && github.repository_owner != 'MaaEnd'
@@ -498,7 +498,7 @@ jobs:
         shell: bash
         run: echo "::error::failed to download previous intermediate artifact from run ${{ steps.previous.outputs.run_id }}"
 
-      - name: Generate incremental patch
+      - name: Generate incremental patches
         id: patch
         if: steps.download.outcome == 'success'
         continue-on-error: true
@@ -509,22 +509,44 @@ jobs:
             --old prev-install \
             --new install \
             --out patch \
-            --exclude agent \
+            --without-agent-out patch-without-agent \
+            --agent-out agent-patch \
             --empty-marker no-changes.zip
           prev_tag=$(uv run python -c 'import json; print(json.load(open("prev-install/interface.json", encoding="utf-8"))["version"])')
           cur_tag=$(uv run python -c 'import json; print(json.load(open("install/interface.json", encoding="utf-8"))["version"])')
-          suffix=""
-          if [ -f patch/no-changes.zip ]; then
-            suffix="-no-changes"
-            echo "::notice::no file changes between the two builds; uploading the empty marker"
+          base="win-x86_64-${prev_tag}-to-${cur_tag}"
+          full_suffix=""
+          if [ -f patch/no-changes.zip ]; then full_suffix="-no-changes"; fi
+          without_agent_suffix=""
+          if [ -f patch-without-agent/no-changes.zip ]; then without_agent_suffix="-no-changes"; fi
+          agent_suffix=""
+          if [ -f agent-patch/no-changes.zip ]; then agent_suffix="-no-changes"; fi
+          echo "full_name=patch-${base}${full_suffix}" >> "$GITHUB_OUTPUT"
+          echo "without_agent_name=patch-without-agent-${base}${without_agent_suffix}" >> "$GITHUB_OUTPUT"
+          echo "agent_name=agent-${base}${agent_suffix}" >> "$GITHUB_OUTPUT"
+          if [ -n "${full_suffix}${without_agent_suffix}${agent_suffix}" ]; then
+            echo "::notice::at least one patch is empty; its -no-changes marker is uploaded"
           fi
-          echo "name=patch-win-x86_64-${prev_tag}-to-${cur_tag}${suffix}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v6
-        if: steps.patch.outputs.name != ''
+        if: steps.patch.outputs.full_name != ''
         with:
-          name: ${{ steps.patch.outputs.name }}
+          name: ${{ steps.patch.outputs.full_name }}
           path: patch
+          retention-days: 90
+
+      - uses: actions/upload-artifact@v6
+        if: steps.patch.outputs.without_agent_name != ''
+        with:
+          name: ${{ steps.patch.outputs.without_agent_name }}
+          path: patch-without-agent
+          retention-days: 90
+
+      - uses: actions/upload-artifact@v6
+        if: steps.patch.outputs.agent_name != ''
+        with:
+          name: ${{ steps.patch.outputs.agent_name }}
+          path: agent-patch
           retention-days: 90
 
   package_linux_tarball:
