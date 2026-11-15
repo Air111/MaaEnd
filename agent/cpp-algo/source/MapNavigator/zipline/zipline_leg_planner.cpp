@@ -928,7 +928,7 @@ std::optional<PlannedLeg> plan_departure(const PlanInputs& in, const TowerSites&
         {
             .start = sites.spots[spot],
             .start_floor_y = sites.nodes[sites.spot_tower[spot]].height,
-            .goal = in.request.goal,
+                        .goal = in.request.goal,
             .goal_floor_y = in.request.goal_floor_y,
             .goal_deck_y = in.request.goal_deck_y,
             .zone_floor_y = in.request.zone_floor_y,
@@ -985,44 +985,6 @@ LegLookup first_leg(
         }
     }
     return lookup;
-}
-
-// 返回这段路折算后的长度
-double straighten_reversed_leg(navmesh::WorldPath* path, double planned_length, const char* side)
-{
-    if (path->points.size() < 2) {
-        return planned_length;
-    }
-    // 下面的赋值会换掉 points 自己, 所以这三个点按值取
-    const navmesh::WorldPoint start = path->points.front();
-    const navmesh::WorldPoint goal = path->points.back();
-    const navmesh::WorldPoint next = path->points[1];
-    const double step_x = next.x - start.x;
-    const double step_y = next.y - start.y;
-    const double goal_x = goal.x - start.x;
-    const double goal_y = goal.y - start.y;
-    const double step_length = std::hypot(step_x, step_y);
-    const double goal_length = std::hypot(goal_x, goal_y);
-    // 起点已经在终点上, 或第一步正好落在终点上, 都没有方向可比
-    if (step_length <= 0.0 || goal_length <= 0.0) {
-        return planned_length;
-    }
-    // ±90° 以内算正常绕行, 再偏就是朝着目的地以外走
-    if (step_x * goal_x + step_y * goal_y >= 0.0) {
-        return planned_length;
-    }
-
-    LogWarn << "ZiplineRoute: the saved leg walks away from its goal, going straight instead." << VAR(side) << VAR(start.x)
-            << VAR(start.y) << VAR(next.x) << VAR(next.y) << VAR(goal.x) << VAR(goal.y) << VAR(planned_length) << VAR(goal_length);
-    path->points = { start, goal };
-    // 逐点数据都是按原来的点算的, 换成直线后必须一起丢掉, 否则高度和落点会对不上
-    path->clearance.clear();
-    path->heights.clear();
-    path->waypoints.clear();
-    path->segment_breaks.clear();
-    path->drops.clear();
-    path->ropes.clear();
-    return goal_length;
 }
 
 // 角色已经站在链上某根塔上时(纠错回程、E 多跳落到链上), 走完的那几跳不用再规划:
@@ -1107,10 +1069,10 @@ std::optional<ZiplineRoute> plan_edited_chain(
         .approach = approach->path,
         .departure = departure->path,
     };
-    // 保存的路径是用户的明确选择, 不跟步行比成本, 但一段路第一步就朝目的地反方向时它就是绕远,
-    // 改成直奔终点的直线 (允许跨高度), 免得下索后先往反方向走再绕回来
-    const double approach_length = straighten_reversed_leg(&route.approach, approach->length, "approach");
-    const double departure_length = straighten_reversed_leg(&route.departure, departure->length, "departure");
+    // 保存的路径是用户的明确选择, 不跟步行比成本. departure 的小落差交给 A* 的
+    // drop 处理; 其余情况按 A* 的换层/楼梯走, 不再按方向清空高度.
+    const double approach_length = approach->length;
+    const double departure_length = departure->length;
     double zip_cost = in.cost.mount_penalty - in.cost.transfer_penalty;
     for (size_t hop = entry; hop + 1 < chain.size(); ++hop) {
         zip_cost += planar_distance(to_world(nodes[chain[hop]]), to_world(nodes[chain[hop + 1]])) * in.cost.speed_ratio
