@@ -546,13 +546,14 @@
         "post_wait_freezes": 200
     },
     "__ScenePrivateTaskTrackedMissionEnterMap": {
-        "desc": "在任务追踪详情页点击定位图标，进入带前往传送按钮的任务地图",
+        "desc": "任务追踪详情页：点定位图标进入带前往传送按钮的任务地图",
         "recognition": "And",
         "all_of": [
             "TrackedMissionMapButton"
         ],
         "pre_delay": 0,
         "action": "Click",
+        "post_wait_freezes": 300,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
@@ -560,7 +561,7 @@
         ]
     },
     "__ScenePrivateTaskTrackedMapEnterMapOverview": {
-        "desc": "在任务追踪地图按一次返回，再从地图总览重新选择区域，重置地图缩放",
+        "desc": "任务追踪地图：按一次 ESC 回干净地图，再点地图总览",
         "recognition": "And",
         "all_of": [
             "QuickTeleportButton"
@@ -572,6 +573,7 @@
                 "key": 27
             }
         },
+        "post_wait_freezes": 300,
         "post_delay": 0,
         "rate_limit": 0,
         "next": [

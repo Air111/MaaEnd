@@ -5,6 +5,7 @@
         "post_delay": 0,
         "next": [
             "__ScenePrivateMapAnyEnterMapWulingWulingCity",
+            "__ScenePrivateMapOverviewEnterMapWulingWulingCity",
             "[JumpBack]SceneEnterMapAny"
         ]
     },
@@ -14,6 +15,7 @@
         "post_delay": 0,
         "next": [
             "__ScenePrivateMapAnyEnterMapWulingJingyuValley",
+            "__ScenePrivateMapOverviewEnterMapWulingJingyuValley",
             "[JumpBack]SceneEnterMapAny"
         ]
     },
@@ -23,6 +25,7 @@
         "post_delay": 0,
         "next": [
             "__ScenePrivateMapAnyEnterMapWulingQingboStockade",
+            "__ScenePrivateMapOverviewEnterMapWulingQingboStockade",
             "[JumpBack]SceneEnterMapAny"
         ]
     },
@@ -32,6 +35,7 @@
         "post_delay": 0,
         "next": [
             "__ScenePrivateMapAnyEnterMapWulingMarkerStone",
+            "__ScenePrivateMapOverviewEnterMapWulingMarkerStone",
             "[JumpBack]SceneEnterMapAny"
         ]
     },
@@ -41,6 +45,7 @@
         "post_delay": 0,
         "next": [
             "__ScenePrivateMapAnyEnterMapWulingTestArea",
+            "__ScenePrivateMapOverviewEnterMapWulingTestArea",
             "[JumpBack]SceneEnterMapAny"
         ]
     },
@@ -50,6 +55,7 @@
         "post_delay": 0,
         "next": [
             "__ScenePrivateMapAnyEnterMapWulingSwordVaultDale",
+            "__ScenePrivateMapOverviewEnterMapWulingSwordVaultDale",
             "[JumpBack]SceneEnterMapAny"
         ]
     },
@@ -121,6 +127,7 @@
         "post_delay": 0,
         "next": [
             "__ScenePrivateMapAnyEnterMapWulingYinglungPass",
+            "__ScenePrivateMapOverviewEnterMapWulingYinglungPass",
             "[JumpBack]SceneEnterMapAny"
         ]
     },
@@ -130,6 +137,7 @@
         "post_delay": 0,
         "next": [
             "__ScenePrivateMapAnyEnterMapWulingNorthWulingExclusionZone",
+            "__ScenePrivateMapOverviewEnterMapWulingNorthWulingExclusionZone",
             "[JumpBack]SceneEnterMapAny"
         ]
     },
@@ -139,6 +147,7 @@
         "post_delay": 0,
         "next": [
             "__ScenePrivateMapAnyEnterMapWulingSnowyForest",
+            "__ScenePrivateMapOverviewEnterMapWulingSnowyForest",
             "[JumpBack]SceneEnterMapAny"
         ]
     },
@@ -148,6 +157,7 @@
         "post_delay": 0,
         "next": [
             "__ScenePrivateMapAnyEnterMapWulingSisPainting",
+            "__ScenePrivateMapOverviewEnterMapWulingSisPainting",
             "[JumpBack]SceneEnterMapAny"
         ]
     }
