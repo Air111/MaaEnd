@@ -39,6 +39,30 @@ function rawJson(value) {
     };
 }
 
+// zip_only 途径点只进入滑索分支，普通寻路保持原路线。
+function withoutZipOnly(param) {
+    if (!param || !Array.isArray(param.path)) {
+        return param;
+    }
+    return {...param, path: param.path.filter((node) => !(node && typeof node === "object" && node.zip_only === true))};
+}
+
+function stripZipOnlyMarkers(param) {
+    if (!param || !Array.isArray(param.path)) {
+        return param;
+    }
+    return {
+        ...param,
+        path: param.path.map((node) => {
+            if (!node || typeof node !== "object" || node.zip_only !== true) {
+                return node;
+            }
+            const {zip_only: _zipOnly, ...rest} = node;
+            return rest;
+        }),
+    };
+}
+
 function buildGoToMonitoringTerminal(station) {
     // Locations.json 中节点统一遵循 EnvironmentMonitoringGoTo{Station} 命名，新终端在 Locations.json 手写补齐。
     return `EnvironmentMonitoringGoTo${station}`;
@@ -52,19 +76,45 @@ function buildZiplineParams(route, Id) {
     const position = lastNavPathPosition(path);
     const zoneName = baseZoneFor(routeZoneId(route?.override, path));
     const usable =
-        Boolean(route?.isAdapted) && !route?.IsDirectPhoto && position !== null && position.tier === "" && zoneName !== "";
+        Boolean(route?.isAdapted) &&
+        !route?.IsDirectPhoto &&
+        position !== null &&
+        position.tier === "" &&
+        zoneName !== "";
     const deckY =
         position?.deckY !== null && position?.deckY !== undefined && Number.isFinite(Number(position.deckY))
             ? Number(position.deckY)
             : null;
+    // required 途径点会把保存路径的规划区间切到途径点；这时需要把匹配目标
+    // 显式指回整条路线的最终点，否则保存链会按途径点匹配而失配。
+    const hasRequiredVia = path.some(
+        (node) => node && node.required === true && (node.action === "NAVMESH" || node.action === "RUN"),
+    );
     const base = {
         zone_name: zoneName || "map02base",
-        goal: position ? [position.x, position.y] : [0, 0],
+        goal: position
+            ? [
+                  position.x,
+                  position.y,
+              ]
+            : [
+                  0,
+                  0,
+              ],
         ...(deckY !== null ? {goal_deck_y: deckY} : {}),
         zip_move: `${Id}MoveWithZipline`,
     };
     return {
         usable,
+        // 保存路径可能只规划到 required 途径点；match 目标仍是整条路线的最终点。
+        matchGoal:
+            hasRequiredVia && position
+                ? [
+                      position.x,
+                      position.y,
+                  ]
+                : null,
+        matchDeckY: hasRequiredVia ? deckY : null,
         // fallback 是没有保存路径时执行的原有传送流程入口。
         param: (fallback) => rawJson({...base, fallback}),
     };
@@ -156,14 +206,26 @@ export function buildRow(mission) {
         AfterTeleportNext: rawJson(AfterTeleportNext),
         StartPosNext: rawJson(StartPosNext),
         RouteAction: route.RouteAction,
-        RouteActionParam: rawJson(route.RouteActionParam),
-        // 允许滑索的移动节点只由 ZiplineRouteGoAction 在命中手工链时启用，
-        // 参数在原有 path 上追加 zip: true。
-        ZipRouteActionParam: rawJson({...route.RouteActionParam, zip: true}),
+        RouteActionParam: rawJson(withoutZipOnly(route.RouteActionParam)),
+        // 允许滑索的移动节点只由 ZiplineRouteGoAction 在命中手工链时启用。
+        // zip_only 途径点只留在这里；保存路径可能只到该途径点，所以 match 目标
+        // 显式保持整条路线的最终点。
+        ZipRouteActionParam: rawJson({
+            ...stripZipOnlyMarkers(route.RouteActionParam),
+            zip: true,
+            ...(zipline.usable && zipline.matchGoal
+                ? {
+                      zipline_match_goal: zipline.matchGoal,
+                      ...(zipline.matchDeckY !== null ? {zipline_match_deck_y: zipline.matchDeckY} : {}),
+                  }
+                : {}),
+        }),
         ZiplineGoParam: zipline.param(`GoTo${Id}`),
         ZiplineGoParamAfterTrack: zipline.param(String(legacyAfterTrackNext[0])),
         ZiplineGoParamAfterTracked: zipline.param(String(legacyAfterAlreadyTrackedNext[0])),
-        FightAfterMoveRouteActionParam: rawJson(route.FightAfterMoveRouteActionParam ?? route.RouteActionParam),
+        FightAfterMoveRouteActionParam: rawJson(
+            withoutZipOnly(route.FightAfterMoveRouteActionParam ?? route.RouteActionParam),
+        ),
     };
 }
 

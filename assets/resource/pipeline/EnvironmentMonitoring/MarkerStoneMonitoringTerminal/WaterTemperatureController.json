@@ -409,6 +409,15 @@
                 {
                     "action": "NAVMESH",
                     "target": [
+                        345,
+                        2172
+                    ],
+                    "target_deck_y": 273.3,
+                    "required": true
+                },
+                {
+                    "action": "NAVMESH",
+                    "target": [
                         333.71,
                         2155.67
                     ],
@@ -419,7 +428,12 @@
                     "angle": 255
                 }
             ],
-            "zip": true
+            "zip": true,
+            "zipline_match_goal": [
+                333.71,
+                2155.67
+            ],
+            "zipline_match_deck_y": 265.55
         },
         "post_delay": 0,
         "rate_limit": 0,

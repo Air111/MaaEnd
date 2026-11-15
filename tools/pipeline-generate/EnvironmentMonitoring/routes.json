@@ -571,6 +571,16 @@
             {
                 "action": "NAVMESH",
                 "target": [
+                    345,
+                    2172
+                ],
+                "target_deck_y": 273.3,
+                "required": true,
+                "zip_only": true
+            },
+            {
+                "action": "NAVMESH",
+                "target": [
                     333.71,
                     2155.67
                 ],
