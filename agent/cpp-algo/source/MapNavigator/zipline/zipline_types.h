@@ -54,6 +54,8 @@ struct ZiplineHopPlan
     // 第一个就是航点本身的落脚点, 只有链首那一跳有
     std::vector<ZiplineMountSpot> mount_spots;
     bool chain_continues = false;
+    // 来自保存路径: 落塔后按已规划的下索段继续走, 不再发起动态重规划
+    bool saved_route = false;
     // 只有链尾那一跳有值
     std::optional<ZiplineMountSpot> exit_aim;
 };

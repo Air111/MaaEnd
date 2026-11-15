@@ -342,6 +342,7 @@ Result finish_hop(Navigator* nav, const HopCompleted& done)
     result.stay_in_current_tick = true;
 
     const Waypoint& current = CurrentWaypoint(*nav->session);
+    const bool saved_hop = current.zipline_hop && current.zipline_hop->saved_route;
     const bool forward_landing =
         done.reached && current.zipline_hop && !SameTower(*done.reached, current.zipline_hop->landing);
     NoteCanonicalFinalGoalConsumed(nav->session, CurrentAbsoluteNodeIndex(*nav->session), done.at, "zipline_ride_complete");
@@ -381,7 +382,18 @@ Result finish_hop(Navigator* nav, const HopCompleted& done)
         }
         LeaveZiplineTower(nav);
     }
-    RequestDynamicReplan(&nav->runtime_state);
+    // 保存路径的下索段在展开时已经按落点和目标算好, 落塔后再规划一次只会把它整个换掉.
+    // E 直接跳到链尾时实际落点可能不是计划落点, 仍交给动态重规划兜底.
+    const bool follow_saved_departure =
+        saved_hop && !forward_landing && HasCurrentWaypoint(*nav->session)
+        && CurrentWaypoint(*nav->session).action == ActionType::RUN;
+    if (follow_saved_departure) {
+        LogInfo << "Zipline saved path: following the planned departure after landing." << VAR(nav->position->x)
+                << VAR(nav->position->y) << VAR(nav->session->current_node_idx);
+    }
+    else {
+        RequestDynamicReplan(&nav->runtime_state);
+    }
     SelectPhaseOrFinishRoute(nav, "zipline_ride_complete");
     return result;
 }
