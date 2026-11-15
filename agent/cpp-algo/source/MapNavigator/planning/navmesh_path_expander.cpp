@@ -748,7 +748,10 @@ std::optional<ZiplineMountSpot>
     return farthest;
 }
 
-void append_hop_waypoints(std::vector<Waypoint>* out_path, const ZiplineRoute& route, const navmesh::WorldPoint& mount_spot)
+void append_hop_waypoints(
+    std::vector<Waypoint>* out_path,
+    const ZiplineRoute& route,
+    const navmesh::WorldPoint& first_waypoint)
 {
     for (size_t hop = 0; hop + 1 < route.towers.size(); ++hop) {
         const zipline::ZiplineNode& from = route.towers[hop];
@@ -758,8 +761,8 @@ void append_hop_waypoints(std::vector<Waypoint>* out_path, const ZiplineRoute& r
 
         out_path->push_back(
             Waypoint {
-                .x = hop == 0 ? mount_spot.x : from.x,
-                .y = hop == 0 ? mount_spot.y : from.y,
+                .x = hop == 0 ? first_waypoint.x : from.x,
+                .y = hop == 0 ? first_waypoint.y : from.y,
                 .action = ActionType::ZIPLINE,
             });
         out_path->back().strict_arrival = true;
@@ -870,12 +873,23 @@ std::optional<double> try_append_zipline_leg(
     }
 
     const size_t insert_index = out_path->size();
-    // 上索点在下面自己补, 起点已在索下时通用追加一个点都不会产出
-    append_generated_waypoints(out_path, route->approach, { .include_goal = false }, ctx->mesh, route->approach.zone_id);
     const navmesh::WorldPoint mount = route->approach.points.back();
     // 架子坐标是角格锚点, 走到跟前常碰不到设备, 所以头一跳瞄第一个站位
     const navmesh::WorldPoint mount_spot = route->mount_spots.empty() ? mount : route->mount_spots.front();
-    append_hop_waypoints(out_path, *route, mount_spot);
+    // 起点已经贴着上索站位时不要先生成一段走远再回来的 approach: 直接把 ZIPLINE 点
+    // 作为当前目标, 让现有的 mount prompt 预筛在起点先试一次.
+    const bool start_at_mount = std::hypot(state->route_start.x - mount_spot.x, state->route_start.y - mount_spot.y)
+                                <= kPromptTriggerBandWu;
+    if (start_at_mount) {
+        LogInfo << "ZiplineRoute: start is already at the mount spot; probing the mount prompt without walking."
+                << VAR(state->route_start.x) << VAR(state->route_start.y) << VAR(mount_spot.x) << VAR(mount_spot.y);
+    }
+    else {
+        // 上索点在下面自己补, 起点已在索下时通用追加一个点都不会产出
+        append_generated_waypoints(out_path, route->approach, { .include_goal = false }, ctx->mesh, route->approach.zone_id);
+    }
+    const navmesh::WorldPoint& first_hop_waypoint = start_at_mount ? state->route_start : mount_spot;
+    append_hop_waypoints(out_path, *route, first_hop_waypoint);
     if (include_departure) {
         append_departure(out_path, *ctx, *route, target);
         move_route_start(state, route->departure.points.back());
