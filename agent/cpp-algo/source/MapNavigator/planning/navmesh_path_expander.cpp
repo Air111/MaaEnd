@@ -44,6 +44,9 @@ struct LegState
     std::optional<double> zone_floor_y;
     std::string current_zone;
     std::string navmesh_zone;
+    // 保存路径已经用一个 required 途径点收尾后, 后续 authored 段走普通展开,
+    // 不能再次按最终点命中同一条保存链.
+    bool saved_zipline_done = false;
 };
 
 void move_route_start(LegState* state, const navmesh::WorldPoint& point)
@@ -1234,6 +1237,13 @@ std::optional<double> append_saved_zipline_span(
     out_path->insert(out_path->end(), std::make_move_iterator(shortcut.begin()), std::make_move_iterator(shortcut.end()));
     stamp_authored_group(out_path, output_begin, begin);
     *state = shortcut_state;
+    state->saved_zipline_done = true;
+    // 保存路径可能只规划到 required 途径点; 后续 authored 段从这里继续,
+    // 要用途径点的层高起步, 不能退回区域默认层.
+    if (target.deck_y) {
+        state->route_start_floor_y = target.deck_y;
+        state->route_start_deck_y = target.deck_y;
+    }
     LogInfo << "Zipline planned the saved path on its own, the walk was never expanded." << VAR(begin) << VAR(end)
             << VAR(target_index) << VAR(out_path->size() - output_begin);
     if (!append_span_tail(ctx, state, out_path, target_index, end)) {
@@ -1257,6 +1267,19 @@ std::optional<double>
     const bool walking_span = std::any_of(path.begin() + static_cast<std::ptrdiff_t>(begin),
                                           path.begin() + static_cast<std::ptrdiff_t>(end),
                                           [](const Waypoint& waypoint) { return IsMovementPoint(waypoint); });
+    // 保存路径已在上一个 required 途径点收尾; 这一段从实际落点开始普通走, 不再重新命中保存链.
+    if (state->saved_zipline_done) {
+        for (size_t index = begin; index < end; ++index) {
+            if (cancel_if_stopped(ctx, *state)) {
+                return false;
+            }
+            if (!append_stamped_authored_waypoint(ctx, state, out_path, index)) {
+                return false;
+            }
+        }
+        state->saved_zipline_done = false;
+        return true;
+    }
     // 保存的滑索路径已经把上下索两段定死了, 先只规划这两段; 仓储前那十几秒一半是白展开的走路基线
     if (!split_at_jump_pads && walking_span && target_index) {
         if (const std::optional<double> saved_cost = append_saved_zipline_span(ctx, state, out_path, begin, end, *target_index)) {
@@ -1324,6 +1347,7 @@ void append_zone_declaration(LegState* state, std::vector<Waypoint>* out_path, c
 {
     state->current_zone = waypoint.zone_id;
     state->zone_floor_y = waypoint.zone_floor_y;
+    state->saved_zipline_done = false;
     out_path->push_back(waypoint);
 }
 

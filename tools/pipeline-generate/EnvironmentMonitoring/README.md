@@ -58,6 +58,8 @@ pnpm exec maa-pipeline-generate --config terminals-config.json
         // （不含 HEADING，朝向仍由 Heading 字段追加）。
         // 普通传送必须有 NavZoneId / NavAssert 用来判断是否调用 EnterMap；
         // 快捷传送不执行起点断言，可同时省略二者。
+        // NavPath 中带 "zip_only": true 的 NAVMESH/RUN 点只进入滑索分支，
+        // 普通 GoTo 路线会把它过滤掉；用于只让保存路径经过的途径点。
         // 如果传送点可以直接拍照，则整组字段一起省略。
     "FightAfterMove": [{ "action": "ZONE", "zone_id": "..." }, [x3, y3], [x4, y4]],
         // 可选；沿途稳定遇敌时，首次寻路后执行 AutoFight，再沿这条独立 path 归位。
