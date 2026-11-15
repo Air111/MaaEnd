@@ -1070,7 +1070,6 @@ std::optional<ZiplineRoute> plan_edited_chain(
         .approach = approach->path,
         .departure = departure->path,
     };
-    route.saved_route = true;
     // 保存的路径是用户的明确选择, 不跟步行比成本. departure 的小落差交给 A* 的
     // drop 处理; 其余情况按 A* 的换层/楼梯走, 不再按方向清空高度.
     const double approach_length = approach->length;

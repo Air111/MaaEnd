@@ -46,8 +46,6 @@ struct ZiplineRoute
     // 链首依次试的上索站位, 为空表示只能按架子坐标走
     std::vector<navmesh::WorldPoint> mount_spots;
     std::vector<NavmeshRouteDiagnostic> diagnostics;
-    // 来自保存路径, 落塔后沿用已规划的 departure, 不再动态重规划
-    bool saved_route = false;
 };
 
 // SameTower 靠世界坐标认架子, 漏一个分量就退化成按像素认, 所以两侧共用这份映射
