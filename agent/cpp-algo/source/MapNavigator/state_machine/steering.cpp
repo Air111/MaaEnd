@@ -55,6 +55,16 @@ double SteerAlongCorridor(Navigator* nav, const NavigateTick& tick)
     const NavRunTickResult& nav_run_result = tick.nav_run_result;
     const Waypoint& waypoint = tick.waypoint;
     const TickFix& fix = tick.fix;
+
+    // 传送落点已经贴着上索架时, 提示在导航第一拍就可能已经亮着. 先让预筛看完这一帧,
+    // 期间连镜头一起按住; 否则转向会先打出去, 人还没交互就先动了一下.
+    if (!route.startup_motion_confirmed && waypoint.action == ActionType::ZIPLINE
+        && !IsZiplineMounted(nav->runtime_state) && route.waypoint_distance <= kPromptTriggerBandWu) {
+        HoldPosition(nav->motion_controller);
+        LogDebug << "Holding still for the start mount prompt." << VAR(route.waypoint_distance);
+        return 0.0;
+    }
+
     const double effective_route_heading = EffectiveRouteHeading(nav_run_result, route);
     const SteeringReading reading = ObserveSteering(
         &nav->runtime_state.steering_rate,

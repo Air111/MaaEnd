@@ -227,7 +227,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "CleansingJadeInQuickTeleportMap"
+            "CleansingJadeGoTargetAfterTrack"
         ]
     },
     "AlreadyTrackedCleansingJade": {
@@ -241,7 +241,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "CleansingJadeOpenTrackedMissionMap"
+            "CleansingJadeGoTargetAfterTracked"
         ]
     },
     "CleansingJadeOpenTrackedMissionMap": {
@@ -315,7 +315,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToCleansingJadeMove"
+            "CleansingJadeTeleportDone"
         ]
     },
     "CleansingJadeNotAdapted": {
@@ -326,6 +326,117 @@
         "focus": {
             "Node.Recognition.Succeeded": "$task.EnvironmentMonitoring.not_adapted"
         }
+    },
+    "CleansingJadeGoTarget": {
+        "desc": "判断是否使用保存的滑索路径前往漱玉；没有保存路径时走原有传送流程",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                726.02,
+                2405
+            ],
+            "zip_move": "CleansingJadeMoveWithZipline",
+            "fallback": "GoToCleansingJade"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "CleansingJadeMoveWithZipline",
+            "GoToCleansingJadeMove"
+        ]
+    },
+    "CleansingJadeGoTargetAfterTrack": {
+        "desc": "刚点击追踪，判断是否使用保存的滑索路径前往漱玉",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                726.02,
+                2405
+            ],
+            "zip_move": "CleansingJadeMoveWithZipline",
+            "fallback": "CleansingJadeInQuickTeleportMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "CleansingJadeMoveWithZipline",
+            "GoToCleansingJadeMove"
+        ]
+    },
+    "CleansingJadeGoTargetAfterTracked": {
+        "desc": "任务已在追踪中，判断是否使用保存的滑索路径前往漱玉",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                726.02,
+                2405
+            ],
+            "zip_move": "CleansingJadeMoveWithZipline",
+            "fallback": "CleansingJadeOpenTrackedMissionMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "CleansingJadeMoveWithZipline",
+            "GoToCleansingJadeMove"
+        ]
+    },
+    "CleansingJadeMoveWithZipline": {
+        "desc": "沿保存的滑索路径前往漱玉",
+        // 只有 ZiplineRouteGoAction 命中手工链时才打开；默认禁用，保证没有保存路径时不启用滑索。
+        "enabled": false,
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "MapNavigateAction",
+        "custom_action_param": {
+            "path": [
+                {
+                    "action": "ZONE",
+                    "zone_id": "Wuling_Base"
+                },
+                [
+                    726.02,
+                    2405
+                ],
+                {
+                    "action": "HEADING",
+                    "angle": 330
+                }
+            ],
+            "zip": true
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "CleansingJadeTakePhoto"
+        ],
+        // 滑索导航失败时退回同一目标点的步行路线。
+        "on_error": [
+            "GoToCleansingJadeMove"
+        ],
+        "focus": {
+            "Node.Action.Succeeded": {
+                "trace": true
+            },
+            "Node.Action.Failed": {
+                "trace": true
+            }
+        }
+    },
+    "CleansingJadeTeleportDone": {
+        "desc": "传送流程结束，交回目标点决策节点继续",
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0
     },
     "GoToCleansingJade": {
         "desc": "前往漱玉，先回到大世界再进行判断",
@@ -361,7 +472,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToCleansingJadeMove"
+            "CleansingJadeTeleportDone"
         ]
     },
     "GoToCleansingJadeNotAtStartPos": {
@@ -377,7 +488,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToCleansingJadeMove"
+            "CleansingJadeTeleportDone"
         ]
     },
     "GoToCleansingJadeMove": {

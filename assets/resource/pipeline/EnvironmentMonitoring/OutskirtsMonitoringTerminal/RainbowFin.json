@@ -227,7 +227,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "RainbowFinInQuickTeleportMap"
+            "RainbowFinGoTargetAfterTrack"
         ]
     },
     "AlreadyTrackedRainbowFin": {
@@ -241,7 +241,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "RainbowFinOpenTrackedMissionMap"
+            "RainbowFinGoTargetAfterTracked"
         ]
     },
     "RainbowFinOpenTrackedMissionMap": {
@@ -315,7 +315,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToRainbowFinMove"
+            "RainbowFinTeleportDone"
         ]
     },
     "RainbowFinNotAdapted": {
@@ -326,6 +326,120 @@
         "focus": {
             "Node.Recognition.Succeeded": "$task.EnvironmentMonitoring.not_adapted"
         }
+    },
+    "RainbowFinGoTarget": {
+        "desc": "判断是否使用保存的滑索路径前往七彩鳞；没有保存路径时走原有传送流程",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                710.64,
+                2664.58
+            ],
+            "zip_move": "RainbowFinMoveWithZipline",
+            "fallback": "GoToRainbowFin"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "RainbowFinMoveWithZipline",
+            "GoToRainbowFinMove"
+        ]
+    },
+    "RainbowFinGoTargetAfterTrack": {
+        "desc": "刚点击追踪，判断是否使用保存的滑索路径前往七彩鳞",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                710.64,
+                2664.58
+            ],
+            "zip_move": "RainbowFinMoveWithZipline",
+            "fallback": "RainbowFinInQuickTeleportMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "RainbowFinMoveWithZipline",
+            "GoToRainbowFinMove"
+        ]
+    },
+    "RainbowFinGoTargetAfterTracked": {
+        "desc": "任务已在追踪中，判断是否使用保存的滑索路径前往七彩鳞",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                710.64,
+                2664.58
+            ],
+            "zip_move": "RainbowFinMoveWithZipline",
+            "fallback": "RainbowFinOpenTrackedMissionMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "RainbowFinMoveWithZipline",
+            "GoToRainbowFinMove"
+        ]
+    },
+    "RainbowFinMoveWithZipline": {
+        "desc": "沿保存的滑索路径前往七彩鳞",
+        // 只有 ZiplineRouteGoAction 命中手工链时才打开；默认禁用，保证没有保存路径时不启用滑索。
+        "enabled": false,
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "MapNavigateAction",
+        "custom_action_param": {
+            "path": [
+                {
+                    "action": "ZONE",
+                    "zone_id": "Wuling_Base"
+                },
+                {
+                    "action": "NAVMESH",
+                    "target": [
+                        710.64,
+                        2664.58
+                    ]
+                },
+                {
+                    "action": "HEADING",
+                    "angle": 140
+                }
+            ],
+            "zip": true
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "RainbowFinTakePhoto"
+        ],
+        // 滑索导航失败时退回同一目标点的步行路线。
+        "on_error": [
+            "GoToRainbowFinMove"
+        ],
+        "focus": {
+            "Node.Action.Succeeded": {
+                "trace": true
+            },
+            "Node.Action.Failed": {
+                "trace": true
+            }
+        }
+    },
+    "RainbowFinTeleportDone": {
+        "desc": "传送流程结束，交回目标点决策节点继续",
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0
     },
     "GoToRainbowFin": {
         "desc": "前往七彩鳞，先回到大世界再进行判断",
@@ -361,7 +475,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToRainbowFinMove"
+            "RainbowFinTeleportDone"
         ]
     },
     "GoToRainbowFinNotAtStartPos": {
@@ -377,7 +491,7 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "GoToRainbowFinMove"
+            "RainbowFinTeleportDone"
         ]
     },
     "GoToRainbowFinMove": {

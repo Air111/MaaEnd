@@ -1,4 +1,4 @@
-import {LOCALES} from "./common.mjs";
+import {LOCALES, baseZoneFor, lastNavPathPosition, routeZoneId} from "./common.mjs";
 import {monitoringMissions} from "./model.mjs";
 
 export {environmentMonitoringData, MONITORING_TERMINAL_IDS} from "./model.mjs";
@@ -39,9 +39,85 @@ function rawJson(value) {
     };
 }
 
+// zip_only 途径点只进入滑索分支，普通寻路保持原路线。
+function withoutZipOnly(param) {
+    if (!param || !Array.isArray(param.path)) {
+        return param;
+    }
+    return {...param, path: param.path.filter((node) => !(node && typeof node === "object" && node.zip_only === true))};
+}
+
+function stripZipOnlyMarkers(param) {
+    if (!param || !Array.isArray(param.path)) {
+        return param;
+    }
+    return {
+        ...param,
+        path: param.path.map((node) => {
+            if (!node || typeof node !== "object" || node.zip_only !== true) {
+                return node;
+            }
+            const {zip_only: _zipOnly, ...rest} = node;
+            return rest;
+        }),
+    };
+}
+
 function buildGoToMonitoringTerminal(station) {
     // Locations.json 中节点统一遵循 EnvironmentMonitoringGoTo{Station} 命名，新终端在 Locations.json 手写补齐。
     return `EnvironmentMonitoringGoTo${station}`;
+}
+
+// 滑索分支只在「有 base 像素终点、且编辑器能录到同一条 goal」的寻路观察点上生成。
+// 终点写在 target_tier 里的观察点编辑器换算不出 base 终点，保存的路径永远对不上，
+// 因此和其它未适配情况一样不生成分支。
+function buildZiplineParams(route, Id) {
+    const path = Array.isArray(route?.override?.NavPath) ? route.override.NavPath : [];
+    const position = lastNavPathPosition(path);
+    const zoneName = baseZoneFor(routeZoneId(route?.override, path));
+    const usable =
+        Boolean(route?.isAdapted) &&
+        !route?.IsDirectPhoto &&
+        position !== null &&
+        position.tier === "" &&
+        zoneName !== "";
+    const deckY =
+        position?.deckY !== null && position?.deckY !== undefined && Number.isFinite(Number(position.deckY))
+            ? Number(position.deckY)
+            : null;
+    // required 途径点会把保存路径的规划区间切到途径点；这时需要把匹配目标
+    // 显式指回整条路线的最终点，否则保存链会按途径点匹配而失配。
+    const hasRequiredVia = path.some(
+        (node) => node && node.required === true && (node.action === "NAVMESH" || node.action === "RUN"),
+    );
+    const base = {
+        zone_name: zoneName || "map02base",
+        goal: position
+            ? [
+                  position.x,
+                  position.y,
+              ]
+            : [
+                  0,
+                  0,
+              ],
+        ...(deckY !== null ? {goal_deck_y: deckY} : {}),
+        zip_move: `${Id}MoveWithZipline`,
+    };
+    return {
+        usable,
+        // 保存路径可能只规划到 required 途径点；match 目标仍是整条路线的最终点。
+        matchGoal:
+            hasRequiredVia && position
+                ? [
+                      position.x,
+                      position.y,
+                  ]
+                : null,
+        matchDeckY: hasRequiredVia ? deckY : null,
+        // fallback 是没有保存路径时执行的原有传送流程入口。
+        param: (fallback) => rawJson({...base, fallback}),
+    };
 }
 
 export function buildRow(mission) {
@@ -54,10 +130,19 @@ export function buildRow(mission) {
         `AlreadyTracked${Id}`,
     ];
     const defaultAfterTrackedNext = route.isAdapted ? [`GoTo${Id}`] : [`${Id}NotAdapted`];
-    const afterTrackNext =
+    const legacyAfterTrackNext =
         route.isAdapted && route.QuickTeleport ? [`${Id}InQuickTeleportMap`] : defaultAfterTrackedNext;
-    const afterAlreadyTrackedNext =
+    const legacyAfterAlreadyTrackedNext =
         route.isAdapted && route.QuickTeleport ? [`${Id}OpenTrackedMissionMap`] : defaultAfterTrackedNext;
+    // 有保存的手工滑索链时，先由 ZiplineRouteGoAction 决定传送入口，再走允许滑索的移动节点；
+    // 没有保存路径时仍然执行这里的原有传送流程。
+    const zipline = buildZiplineParams(route, Id);
+    const afterTrackNext = zipline.usable
+        ? [route.QuickTeleport ? `${Id}GoTargetAfterTrack` : `${Id}GoTarget`]
+        : legacyAfterTrackNext;
+    const afterAlreadyTrackedNext = zipline.usable
+        ? [route.QuickTeleport ? `${Id}GoTargetAfterTracked` : `${Id}GoTarget`]
+        : legacyAfterAlreadyTrackedNext;
     // 传送点可直接拍照时不需要位置断言：统一先进入大世界，再无条件执行真实传送。
     const GoToNext =
         route.IsDirectPhoto && !route.QuickTeleport
@@ -74,11 +159,15 @@ export function buildRow(mission) {
         : route.ShouldAssertAfterTeleport
           ? "先传送再检查落点"
           : "先传送再继续寻路";
-    const AfterTeleportNext = route.IsDirectPhoto
+    const legacyAfterTeleportNext = route.IsDirectPhoto
         ? [route.HasHeading ? `GoTo${Id}Move` : `${Id}TakePhoto`]
         : route.ShouldAssertAfterTeleport
           ? [`GoTo${Id}StartPos`]
           : [`GoTo${Id}Move`];
+    // 生成滑索分支时，原传送流程（含 EnterMap 的起点断言）只负责把角色送到地面，
+    // 移动统一交给 GoTarget 动作后面的两个移动节点决定。
+    const AfterTeleportNext = zipline.usable ? [`${Id}TeleportDone`] : legacyAfterTeleportNext;
+    const StartPosNext = zipline.usable ? [`${Id}TeleportDone`] : [`GoTo${Id}Move`];
     const GoToNotAtStartPosDescription = route.IsDirectPhoto
         ? `前往${Name}传送点，${AfterTeleportDescription}`
         : `不在${Name}任务开始位置附近，${AfterTeleportDescription}`;
@@ -115,9 +204,28 @@ export function buildRow(mission) {
         MoveNext: rawJson(MoveNext),
         AfterTeleportDescription,
         AfterTeleportNext: rawJson(AfterTeleportNext),
+        StartPosNext: rawJson(StartPosNext),
         RouteAction: route.RouteAction,
-        RouteActionParam: rawJson(route.RouteActionParam),
-        FightAfterMoveRouteActionParam: rawJson(route.FightAfterMoveRouteActionParam ?? route.RouteActionParam),
+        RouteActionParam: rawJson(withoutZipOnly(route.RouteActionParam)),
+        // 允许滑索的移动节点只由 ZiplineRouteGoAction 在命中手工链时启用。
+        // zip_only 途径点只留在这里；保存路径可能只到该途径点，所以 match 目标
+        // 显式保持整条路线的最终点。
+        ZipRouteActionParam: rawJson({
+            ...stripZipOnlyMarkers(route.RouteActionParam),
+            zip: true,
+            ...(zipline.usable && zipline.matchGoal
+                ? {
+                      zipline_match_goal: zipline.matchGoal,
+                      ...(zipline.matchDeckY !== null ? {zipline_match_deck_y: zipline.matchDeckY} : {}),
+                  }
+                : {}),
+        }),
+        ZiplineGoParam: zipline.param(`GoTo${Id}`),
+        ZiplineGoParamAfterTrack: zipline.param(String(legacyAfterTrackNext[0])),
+        ZiplineGoParamAfterTracked: zipline.param(String(legacyAfterAlreadyTrackedNext[0])),
+        FightAfterMoveRouteActionParam: rawJson(
+            withoutZipOnly(route.FightAfterMoveRouteActionParam ?? route.RouteActionParam),
+        ),
     };
 }
 

@@ -16,7 +16,7 @@ struct ZiplineIo;
 // hint_nodes 是这一帧定位优先搜索的位置
 ZiplineObservation ZiplineIoObserveTracked(ZiplineIo* io, const std::vector<ZiplineNodeRef>& hint_nodes);
 ZiplineObservation ZiplineIoObserveGlobal(ZiplineIo* io, const std::vector<ZiplineNodeRef>& hint_nodes);
-// 只在上索与下索确认期间调, 每次都要跑识别, 开销比一帧定位高
+// 每次都要跑识别, 开销比一帧定位高
 MountVerdict ZiplineIoCheckMounted(ZiplineIo* io);
 void ZiplineIoResetTracking(ZiplineIo* io);
 // 每个动作同步发出、发完即回, 到没到位靠后续观测
@@ -26,6 +26,10 @@ std::optional<double> ZiplineIoTurnYaw(ZiplineIo* io, double delta_deg);
 bool ZiplineIoLowerPitchTo(ZiplineIo* io, double elevation_deg);
 // 识别不到交互提示时不发按键, 返回是否识别到
 bool ZiplineIoPressMount(ZiplineIo* io);
+// 滑行中扫 E 提示; 识别到才按键, 返回是否按下
+bool ZiplineIoPressZiplineE(ZiplineIo* io);
+// 只识别 E 提示, 不按键; 用于按下后确认按钮是否消失
+bool ZiplineIoIsZiplineEPromptVisible(ZiplineIo* io);
 void ZiplineIoFireLaunch(ZiplineIo* io);
 void ZiplineIoDismount(ZiplineIo* io);
 void ZiplineIoWait(ZiplineIo* io, int32_t ms);
@@ -110,6 +114,15 @@ struct ZiplineRide
 
     YawAim aim;
     std::optional<int32_t> aim_budget_ms;
+
+    int e_press_count = 0;
+    int e_click_attempts = 0;
+    bool e_prompt_failed = false;
+    std::optional<std::chrono::steady_clock::time_point> last_e_scan_at;
+    std::optional<std::chrono::steady_clock::time_point> last_e_press_at;
+    std::optional<std::chrono::steady_clock::time_point> e_click_verify_at;
+    std::optional<std::chrono::steady_clock::time_point> e_scan_deadline;
+    int32_t e_scan_timeout_ms = kZiplineEScanDefaultMs;
 
     ZiplineMountSpot exit_aim;
     int32_t exit_aim_budget_ms = 0;

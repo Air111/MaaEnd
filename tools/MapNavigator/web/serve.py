@@ -22,6 +22,9 @@
   GET  /api/zone-ids          -> assert 模式 zone 下拉可选值 (list_available_zone_ids)
   GET  /api/zipline-frames    -> 滑索世界坐标到 base 底图的只读标定
   GET  /api/zipline-records   -> 当前安装目录的只读滑索记录
+  GET  /api/zipline-routes    -> 按地区-目标点保存的手工滑索链、可编辑目标点与传送锚点
+  POST /api/zipline-routes    -> 覆盖保存一条手工滑索链
+  DELETE /api/zipline-routes  -> 删除一条手工滑索链
   GET  /mesh/{zone_id}        -> 某几何区的 NMSH 二进制网格缓冲 (application/octet-stream)
   POST /api/route-preview     -> 按 MapNavigateAction 运行时语义展开作者路线与滑索段
   GET  /api/settings          -> 读取 ~/.maaend/mapnavigator.json
@@ -101,10 +104,20 @@ from settings_store import (  # noqa: E402
     default_connection_kind,
     supported_connection_kinds,
 )
+from zipline_routes import (  # noqa: E402
+    SavedZiplineRoute,
+    build_targets,
+    build_teleport_entries,
+    delete_saved_route,
+    load_saved_routes,
+    normalize_saved_route,
+    save_saved_route,
+)
 
 # --- 常量 -----------------------------------------------------------------------------
 ZIPLINE_FRAMES = RESOURCE_DIR.parent / "data" / "MapNavigator" / "zipline_frames.json"
 ZIPLINE_RECORDS = INSTALL_DIR / "debug" / "record" / "Ziplines.json"
+ZIPLINE_ROUTES = INSTALL_DIR / "debug" / "record" / "ZiplineRoutes.json"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 DEFAULT_PORT = 8770
@@ -119,6 +132,8 @@ def _log(message: str) -> None:
 navmesh_backend = NavmeshBackend(default_pack_path())
 # 禁区表的写与删串行: 两次保存共用同一个临时文件名, 不串行会互相替换半成品。
 _nogo_write_lock = threading.Lock()
+# 手工滑索链的读改写也串行, 避免两个页面同时保存时丢掉对方刚写入的一条
+_zipline_routes_lock = threading.Lock()
 
 
 # --- maafw 运行时 (惰性加载, 仅录制需要) ----------------------------------------------
@@ -611,6 +626,75 @@ async def api_zipline_records() -> FileResponse:
     return FileResponse(ZIPLINE_RECORDS, media_type="application/json")
 
 
+def _zipline_routes_payload(
+    routes: Sequence[SavedZiplineRoute],
+    *,
+    include_targets: bool,
+    error: str = "",
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "routes": [route.as_dict() for route in routes],
+        "path": str(ZIPLINE_ROUTES),
+        "error": error,
+    }
+    if include_targets:
+        payload["targets"] = [target.as_dict() for target in build_targets()]
+        payload["teleports"] = build_teleport_entries()
+    return payload
+
+
+@app.get("/api/zipline-routes")
+async def api_zipline_routes() -> dict[str, Any]:
+    """手工滑索链 + 可编辑的送货点。文件损坏时仍返回送货点，让页面能覆盖修复。"""
+
+    def _load() -> dict[str, Any]:
+        error = ""
+        try:
+            routes = load_saved_routes(ZIPLINE_ROUTES)
+        except (OSError, ValueError) as exc:
+            routes = []
+            error = f"读取手工滑索路径失败：{exc}"
+        return _zipline_routes_payload(routes, include_targets=True, error=error)
+
+    return await run_in_threadpool(_load)
+
+
+@app.post("/api/zipline-routes")
+async def api_save_zipline_route(payload: dict[str, Any] = Body(default_factory=dict)) -> dict[str, Any]:
+    """按 (账号, 区, 终点) 覆盖保存一条手工滑索链。"""
+    try:
+        route = normalize_saved_route(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    def _save() -> list[SavedZiplineRoute]:
+        with _zipline_routes_lock:
+            return save_saved_route(ZIPLINE_ROUTES, route)
+
+    try:
+        routes = await run_in_threadpool(_save)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=500, detail=f"保存手工滑索路径失败：{exc}") from exc
+    return _zipline_routes_payload(routes, include_targets=False)
+
+
+@app.delete("/api/zipline-routes")
+async def api_delete_zipline_route(account_id: str, zone_name: str, goal_x: float, goal_y: float) -> dict[str, Any]:
+    """删除某个送货点的手工滑索链，之后运行时回到自动查找。"""
+    if not account_id.strip() or not zone_name.strip():
+        raise HTTPException(status_code=400, detail="account_id 与 zone_name 不能为空")
+
+    def _delete() -> list[SavedZiplineRoute]:
+        with _zipline_routes_lock:
+            return delete_saved_route(ZIPLINE_ROUTES, account_id, zone_name, goal_x, goal_y)
+
+    try:
+        routes = await run_in_threadpool(_delete)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=500, detail=f"删除手工滑索路径失败：{exc}") from exc
+    return _zipline_routes_payload(routes, include_targets=False)
+
+
 @app.get("/api/platform")
 async def api_platform() -> dict[str, Any]:
     """后端跑在用户本机, 所以它的 sys.platform 就是用户的系统。前端据此禁用连不上的方式。"""
@@ -867,6 +951,15 @@ def _unresolved_zone_ids(points: list) -> list[str]:
     return [z for z in zone_ids if resolve_zone_image(z, MAP_IMAGE_DIR) is None]
 
 
+def _map_zones(payload: dict[str, Any]) -> dict[str, str]:
+    """区名 -> 所在地图的底图区名, 由前端随请求带上它从 /api/zones 取到的表。"""
+
+    map_zones = payload.get("map_zones")
+    if not isinstance(map_zones, dict) or not map_zones:
+        raise ValueError("地图区表还没加载完, 请稍后再试")
+    return {str(zone): str(map_zone) for zone, map_zone in map_zones.items()}
+
+
 def _unresolved_zone_message(unresolved: list[str]) -> str:
     text = "、".join(unresolved[:6])
     if len(unresolved) > 6:
@@ -891,13 +984,17 @@ async def api_import_analyze(payload: dict[str, Any] = Body(default_factory=dict
             load_points_from_json_file,
             split_route_into_segments,
         )
-        from model import normalize_path_points
+        from model import assign_point_frames, normalize_path_points
 
+        try:
+            map_zones = _map_zones(payload)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
         tmp = _write_temp_json(text)
         try:
             # 先按路线导入, 失败再退回 Assert
             try:
-                route = load_points_from_json_file(tmp)
+                route = load_points_from_json_file(tmp, map_zones)
             except Exception as route_exc:
                 try:
                     location = load_assert_location_from_json_file(tmp)
@@ -946,7 +1043,7 @@ async def api_import_analyze(payload: dict[str, Any] = Body(default_factory=dict
                     }
                 # 无片段/无可选区域 -> 沿用原点位直接归一化
 
-            final_points = normalize_path_points(imported_points)
+            final_points = normalize_path_points(assign_point_frames(imported_points, map_zones), map_zones)
             unresolved = _unresolved_zone_ids(final_points)
             if unresolved:
                 return {"ok": False, "error": _unresolved_zone_message(unresolved)}
@@ -974,7 +1071,7 @@ async def api_import_finalize(payload: dict[str, Any] = Body(default_factory=dic
         raise HTTPException(status_code=400, detail="raw_points / zone_assignments 需为数组")
 
     def _run() -> dict[str, Any]:
-        from model import normalize_path_points
+        from model import assign_point_frames, normalize_path_points
 
         assigned_points = [dict(point) for point in raw_points]
         selected_zone_names: list[str] = []
@@ -992,7 +1089,11 @@ async def api_import_finalize(payload: dict[str, Any] = Body(default_factory=dic
         if not selected_zone_names:
             return {"ok": False, "error": "当前没有任何可用区域映射。"}
 
-        final_points = normalize_path_points(assigned_points)
+        try:
+            map_zones = _map_zones(payload)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        final_points = normalize_path_points(assign_point_frames(assigned_points, map_zones), map_zones)
         unresolved = _unresolved_zone_ids(final_points)
         if unresolved:
             return {"ok": False, "error": _unresolved_zone_message(unresolved)}
@@ -1006,11 +1107,15 @@ async def api_export_path(payload: dict[str, Any] = Body(default_factory=dict)) 
     points = payload.get("points", [])
     if not isinstance(points, list):
         raise HTTPException(status_code=400, detail="points 需为数组")
+    try:
+        map_zones = _map_zones(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     def _run() -> dict[str, Any]:
         from json_import import export_path_nodes
 
-        nodes = export_path_nodes(points)
+        nodes = export_path_nodes(points, map_zones)
         # indent=4, ensure_ascii=False —— 与 tk 工具 (app_tk.py) 的复制格式逐字节一致
         text = json.dumps(nodes, indent=4, ensure_ascii=False)
         return {"nodes": nodes, "text": text}
@@ -1209,6 +1314,7 @@ async def _ws_session(websocket: WebSocket, mode: SessionMode) -> None:
         payload = inner if isinstance(inner, dict) else first
         path = first.get("path")
         assert_target = first.get("assert_target")
+        map_zones = first.get("map_zones")
         start_msg = {
             "type": "start",
             "config": payload,
@@ -1219,6 +1325,7 @@ async def _ws_session(websocket: WebSocket, mode: SessionMode) -> None:
             "zipline_account_id": str(first.get("zipline_account_id") or ""),
             "heading_source": first.get("heading_source", "character"),
             "assert_target": assert_target if isinstance(assert_target, dict) else None,
+            "map_zones": map_zones if isinstance(map_zones, dict) else {},
             "live_only": bool(first.get("live_only")),
         }
 

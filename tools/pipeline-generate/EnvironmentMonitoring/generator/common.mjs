@@ -147,3 +147,80 @@ export function isFieldMissing(value) {
     }
     return false;
 }
+
+// 与 cpp-algo planning/navmesh_cache.cpp 的 kBaseNavZoneAliases 镜像：
+// 把区域标识落到 zipline_frames.json / 手工滑索路径使用的 base 区名。
+const BASE_ZONE_ALIASES = [
+    ["map01base", ["map01", "ValleyIV"]],
+    ["map02base", ["map02", "Wuling"]],
+    ["base01", ["base01", "OMVBase"]],
+    ["dung01", ["dung01", "Dung"]],
+    ["indie_dg005", ["indie_dg005", "IndieDg005"]],
+    ["indie_dg007", ["indie_dg007", "IndieDg007"]],
+    ["indie_dg016", ["indie_dg016", "IndieDg016"]],
+];
+
+export function baseZoneFor(zoneId) {
+    const normalized = String(zoneId || "").trim();
+    if (!normalized) {
+        return "";
+    }
+    for (const [baseZone, prefixes] of BASE_ZONE_ALIASES) {
+        if (normalized === baseZone || prefixes.some((prefix) => normalized.startsWith(prefix))) {
+            return baseZone;
+        }
+    }
+    return "";
+}
+
+// 取 NavPath 最后一个带坐标的路点。裸数组 [x, y] 也是普通路点（默认 RUN），
+// 环境监测的手录路线经常以它结尾；target_tier 只影响坐标系，不影响这里取点。
+export function lastNavPathPosition(path) {
+    let last = null;
+    for (const item of Array.isArray(path) ? path : []) {
+        if (Array.isArray(item)) {
+            const x = Number(item[0]);
+            const y = Number(item[1]);
+            if (item.length >= 2 && Number.isFinite(x) && Number.isFinite(y)) {
+                last = {x, y, deckY: null, tier: ""};
+            }
+            continue;
+        }
+        if (!item || typeof item !== "object") {
+            continue;
+        }
+        const target = Array.isArray(item.target) ? item.target : [];
+        const x = Number(target[0]);
+        const y = Number(target[1]);
+        if (target.length < 2 || !Number.isFinite(x) || !Number.isFinite(y)) {
+            continue;
+        }
+        last = {
+            x,
+            y,
+            deckY: item.target_deck_y ?? null,
+            tier: String(item.target_tier || "").trim(),
+        };
+    }
+    return last;
+}
+
+export function routeZoneId(override, path) {
+    const explicit = String(override?.NavZoneId || "").trim();
+    if (explicit) {
+        return explicit;
+    }
+    for (const item of Array.isArray(path) ? path : []) {
+        if (!item || typeof item !== "object") {
+            continue;
+        }
+        if (String(item.action || "").toUpperCase() !== "ZONE") {
+            continue;
+        }
+        const zoneId = item.zone_id || item.zone;
+        if (zoneId) {
+            return String(zoneId);
+        }
+    }
+    return "";
+}

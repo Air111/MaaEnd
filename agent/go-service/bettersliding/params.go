@@ -25,6 +25,7 @@ type parsedBetterSlidingParams struct {
 	swipeOnlyMode                 bool
 	fineTuneQuantity              fineTuneQuantity
 	fineTuneFallback              string
+	quantityTolerance             int
 	resetBeforeFindStart          bool
 
 	swipeButtonPatch             map[string]any
@@ -60,6 +61,7 @@ func detectBetterSlidingParamPresence(rawParam string) (betterSlidingParamPresen
 		ClampTargetToSliderMax:        hasNonNullRawKey(rawKeys, "ClampTargetToSliderMax"),
 		FineTuneQuantity:              hasNonNullRawKey(rawKeys, "FineTuneQuantity"),
 		FineTuneFallback:              hasNonNullRawKey(rawKeys, "FineTuneFallback"),
+		QuantityTolerance:             hasNonNullRawKey(rawKeys, "QuantityTolerance"),
 		ResetBeforeFindStart:          hasNonNullRawKey(rawKeys, "ResetBeforeFindStart"),
 	}, nil
 }
@@ -184,6 +186,19 @@ func (a *BetterSlidingAction) normalizeActionParams(
 		return parsedBetterSlidingParams{}, false
 	}
 	parsed.fineTuneFallback = fineTuneFallback
+
+	quantityTolerance, err := normalizeQuantityTolerance(
+		params.QuantityTolerance,
+		params.presence.QuantityTolerance,
+	)
+	if err != nil {
+		a.logger.Error().
+			Err(err).
+			Int("quantity_tolerance", params.QuantityTolerance).
+			Msg("invalid QuantityTolerance")
+		return parsedBetterSlidingParams{}, false
+	}
+	parsed.quantityTolerance = quantityTolerance
 
 	swipeButtonPatch, err := resolveRecognitionParam(ctx, params.SwipeButton)
 	if err != nil {
@@ -342,6 +357,7 @@ func (a *BetterSlidingAction) applyActionParams(params parsedBetterSlidingParams
 	a.SwipeOnlyMode = params.swipeOnlyMode
 	a.FineTuneQuantity = params.fineTuneQuantity
 	a.FineTuneFallback = params.fineTuneFallback
+	a.QuantityTolerance = params.quantityTolerance
 	a.ResetBeforeFindStart = params.resetBeforeFindStart
 
 	a.swipeButtonPatch = params.swipeButtonPatch
@@ -367,6 +383,7 @@ func (a *BetterSlidingAction) logParsedActionParams(controllerType string) {
 		Str("fine_tune_quantity_mode", a.FineTuneQuantity.modeLabel()).
 		Bool("fine_tune_quantity_enabled", a.FineTuneQuantity.enabled).
 		Int("fine_tune_quantity_threshold", a.FineTuneQuantity.threshold).
+		Int("quantity_tolerance_base", a.QuantityTolerance).
 		Str("fine_tune_fallback", a.FineTuneFallback).
 		Bool("reset_before_find_start", a.ResetBeforeFindStart).
 		Str("out_of_range_override_enable", a.OutOfRangeOverrideEnable).
@@ -376,7 +393,9 @@ func (a *BetterSlidingAction) logParsedActionParams(controllerType string) {
 		Bool("swipe_only_mode", a.SwipeOnlyMode)
 
 	if a.runtimeTargetResolved {
-		parseLog = parseLog.Int("runtime_target_quantity", a.TargetQuantity)
+		parseLog = parseLog.
+			Int("runtime_target_quantity", a.TargetQuantity).
+			Int("quantity_tolerance", a.quantityToleranceFor(a.TargetQuantity))
 	}
 
 	patches := []struct {

@@ -39,6 +39,19 @@
             }
         },
         {
+            "name": "Win32-NoGame",
+            "label": "$controller.Win32-NoGame.label",
+            "description": "$controller.Win32-NoGame.description",
+            "type": "Win32",
+            "win32": {
+                "class_regex": ".*",
+                "window_regex": ".*",
+                "screencap": "ScreenDC",
+                "mouse": "SendMessage",
+                "keyboard": "SendMessage"
+            }
+        },
+        {
             "name": "ADB",
             "label": "$controller.ADB.label",
             "description": "$controller.ADB.description",
@@ -251,6 +264,7 @@
         "tasks/AutoEssence/Location/WLSisPainting.json",
         "tasks/AutoEssence/Target/Target.json",
         "tasks/ProtocolSpace.json",
+        "tasks/OperatorGrowth.json",
         // group: dijiang_ship
         "tasks/DijiangRewards.json",
         "tasks/VisitFriends.json",
@@ -296,6 +310,7 @@
         "tasks/preset/IndependentTasks.json",
         // setting
         "tasks/setting/Keymap.json",
-        "tasks/setting/Zipline.json"
+        "tasks/setting/Zipline.json",
+        "tasks/setting/ItemStats.json"
     ]
 }

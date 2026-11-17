@@ -1,4 +1,47 @@
 {
+    "__ScenePrivateAnyEnterMenuOperationalManualSuccess": {
+        "pre_wait_freezes": {
+            "time": 200,
+            "target": [
+                40,
+                85,
+                1200,
+                48
+            ]
+        }
+    },
+    "__ScenePrivateMenuOperationalManualIndexTabSelected": {
+        "roi": [
+            441,
+            85,
+            199,
+            48
+        ]
+    },
+    "__ScenePrivateMenuOperationalManualDailyTabSelected": {
+        "roi": [
+            242,
+            85,
+            199,
+            48
+        ]
+    },
+    "__ScenePrivateMenuOperationalManualSimulationTabSelected": {
+        "roi": [
+            840,
+            85,
+            199,
+            48
+        ]
+    },
+    // 移动端控制器不使用按键控制菜单：禁用基座的按键进入节点，保持原有点击链
+    // （PlayCover 无任何按键能力，CloudADB / 原生安卓同样挂载本资源包）
+    "__ScenePrivateWorldEnterMenuRegionalDevelopmentKey": {
+        "enabled": false
+    },
+    "__ScenePrivateWorldEnterMenuMissionKey": {
+        "enabled": false
+    },
     "__ScenePrivateMenuValuablesEnterValuableTab": {
         "roi": [
             0,
