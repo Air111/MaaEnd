@@ -1,9 +1,8 @@
 {
     "MapNavigatorZiplineAccount": {
-        "desc": "强制滑索账号。只承载设置项写入的值，寻路开始前读一次，不会被执行",
+        "desc": "本任务指定的滑索账号。任务入口按选项写入，寻路开始前读一次，不会被执行",
         "attach": {
-            "account_id": "",
-            "force_first": false
+            "account_id": ""
         }
     }
 }

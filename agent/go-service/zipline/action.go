@@ -16,7 +16,7 @@ const (
 	actionName = "ZiplineRouteGoAction"
 	// identityNode 由 CaptureUid 发布，是当前游戏账号的伪匿名标识。
 	identityNode = "CurrentAccountIdentity"
-	// accountOverrideNode 是设置项「强制使用第一份滑索数据」的载体，优先于当前账号。
+	// accountOverrideNode 是任务设置里「指定滑索账号 UID」的载体，优先于当前账号。
 	accountOverrideNode = "MapNavigatorZiplineAccount"
 	// preferenceNode 是「优先使用滑索」开关的载体，只承载设置项写入的值。
 	preferenceNode = "SavedZiplineRoutePreference"
@@ -166,7 +166,7 @@ func lookupRoute(ctx *maa.Context, params goActionParam) *savedRoute {
 	return findRoute(routes, accountID, params.ZoneName, params.Goal[0], params.Goal[1], params.GoalDeckY)
 }
 
-// currentAccountID 复刻 cpp-algo ResolveZiplineAccountId 的前两级：设置项指定的账号优先，
+// currentAccountID 复刻 cpp-algo ResolveZiplineAccountId 的前两级：任务设置里指定的账号优先，
 // 否则使用当前游戏账号；都读不到时返回空字符串（此时只有账号为空的记录能匹配）。
 func currentAccountID(ctx *maa.Context) string {
 	for _, nodeName := range []string{accountOverrideNode, identityNode} {

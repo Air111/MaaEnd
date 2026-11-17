@@ -9,6 +9,7 @@
                 "AccountSwitchWindowAction",
                 "AddItemData",
                 "AeroSalvageConfigureSwipeAction",
+                "ApplyZiplineAccountUid",
                 "ArenaOfGames.Decide",
                 "AttachToExpectedRegexAction",
                 "AutoAltClickAction",
@@ -118,6 +119,25 @@
                     "custom_action_param": {"$ref": "./components/ims.schema.json#/$defs/AddItemDataParam"}
                 },
                 "required": ["custom_action_param"]
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "custom_action": {"const": "ApplyZiplineAccountUid"}
+                },
+                "required": ["custom_action"]
+            },
+            "then": {
+                "properties": {
+                    "custom_action_param": {
+                        "type": "object",
+                        "properties": {
+                            "uid": {"type": "string", "pattern": "^(\\d{8,12})?$"}
+                        },
+                        "additionalProperties": false
+                    }
+                }
             }
         },
         {
