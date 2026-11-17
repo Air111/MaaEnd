@@ -30,7 +30,7 @@
             "option": [
                 "SeizeDeliveryJobsReward",
                 "SeizeDeliveryJobsRefreshLimit",
-                "SeizeDeliveryJobsForceZiplineAccount",
+                "SeizeDeliveryJobsZiplineAccountUid",
                 "SeizeDeliveryJobsCommissionSource",
                 "SeizeDeliveryJobsPostProcessing"
             ]
@@ -354,26 +354,26 @@
             ],
             "default_case": "3"
         },
-        "SeizeDeliveryJobsForceZiplineAccount": {
-            "type": "switch",
-            "label": "$task.SeizeDeliveryJobsForceZiplineAccount.label",
-            "description": "$task.SeizeDeliveryJobsForceZiplineAccount.description",
-            "cases": [
+        "SeizeDeliveryJobsZiplineAccountUid": {
+            "type": "input",
+            "label": "$task.SeizeDeliveryJobsZiplineAccountUid.label",
+            "description": "$task.SeizeDeliveryJobsZiplineAccountUid.description",
+            "inputs": [
                 {
-                    "name": "No"
-                },
-                {
-                    "name": "Yes",
-                    "pipeline_override": {
-                        "MapNavigatorZiplineAccount": {
-                            "attach": {
-                                "force_first": true
-                            }
-                        }
-                    }
+                    "name": "Uid",
+                    "label": "$task.SeizeDeliveryJobsZiplineAccountUid.inputs.Uid.label",
+                    "default": "",
+                    "pipeline_type": "string",
+                    "verify": "^(\\d{8,12})?$"
                 }
             ],
-            "default_case": "No"
+            "pipeline_override": {
+                "SeizeDeliveryJobsApplyZiplineUid": {
+                    "custom_action_param": {
+                        "uid": "{Uid}"
+                    }
+                }
+            }
         }
     }
 }

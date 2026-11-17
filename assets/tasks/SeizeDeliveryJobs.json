@@ -27,7 +27,7 @@
             "option": [
                 "SeizeDeliveryJobsReward",
                 "SeizeDeliveryJobsRefreshLimit",
-                "SeizeDeliveryJobsForceZiplineAccount",
+                "SeizeDeliveryJobsZiplineAccountUid",
                 "SeizeDeliveryJobsCommissionSource",
                 "SeizeDeliveryJobsPostProcessing"
             ]
@@ -733,27 +733,6 @@
                 }
             }
         },
-        "SeizeDeliveryJobsForceZiplineAccount": {
-            "type": "switch",
-            "label": "$task.SeizeDeliveryJobsForceZiplineAccount.label",
-            "description": "$task.SeizeDeliveryJobsForceZiplineAccount.description",
-            "cases": [
-                {
-                    "name": "No"
-                },
-                {
-                    "name": "Yes",
-                    "pipeline_override": {
-                        "MapNavigatorZiplineAccount": {
-                            "attach": {
-                                "force_first": true
-                            }
-                        }
-                    }
-                }
-            ],
-            "default_case": "No"
-        },
         "SeizeDeliveryJobsRepeatCount": {
             "type": "select",
             "label": "$task.SeizeDeliveryJobsRepeatCount.label",
@@ -788,6 +767,27 @@
                 }
             ],
             "default_case": "3"
+        },
+        "SeizeDeliveryJobsZiplineAccountUid": {
+            "type": "input",
+            "label": "$task.SeizeDeliveryJobsZiplineAccountUid.label",
+            "description": "$task.SeizeDeliveryJobsZiplineAccountUid.description",
+            "inputs": [
+                {
+                    "name": "Uid",
+                    "label": "$task.SeizeDeliveryJobsZiplineAccountUid.inputs.Uid.label",
+                    "default": "",
+                    "pipeline_type": "string",
+                    "verify": "^(\\d{8,12})?$"
+                }
+            ],
+            "pipeline_override": {
+                "SeizeDeliveryJobsApplyZiplineUid": {
+                    "custom_action_param": {
+                        "uid": "{Uid}"
+                    }
+                }
+            }
         },
         "SeizeDeliveryJobsSpecifyDeliveryPointTestArea": {
             "type": "switch",
