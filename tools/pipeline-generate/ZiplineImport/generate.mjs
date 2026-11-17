@@ -124,6 +124,7 @@ function buildTask(regions) {
             type: "switch",
             controller: [
                 "Win32-Front",
+                "Win32-NoGame",
                 "ADB",
                 "PlayCover",
             ],
@@ -146,6 +147,7 @@ function buildTask(regions) {
             type: "input",
             controller: [
                 "Win32-Front",
+                "Win32-NoGame",
                 "ADB",
                 "PlayCover",
             ],
@@ -235,6 +237,7 @@ function buildTask(regions) {
                     "Linux-ScreenCast",
                     "Linux-Wlroots",
                     "Win32-Front",
+                    "Win32-NoGame",
                     "ADB",
                     "PlayCover",
                 ],

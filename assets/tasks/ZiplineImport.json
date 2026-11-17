@@ -13,6 +13,7 @@
                 "Linux-ScreenCast",
                 "Linux-Wlroots",
                 "Win32-Front",
+                "Win32-NoGame",
                 "ADB",
                 "PlayCover"
             ],
@@ -28,6 +29,7 @@
             "type": "switch",
             "controller": [
                 "Win32-Front",
+                "Win32-NoGame",
                 "ADB",
                 "PlayCover"
             ],
@@ -50,6 +52,7 @@
             "type": "input",
             "controller": [
                 "Win32-Front",
+                "Win32-NoGame",
                 "ADB",
                 "PlayCover"
             ],
