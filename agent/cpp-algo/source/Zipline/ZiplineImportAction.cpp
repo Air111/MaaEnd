@@ -238,14 +238,31 @@ std::string MaskUid(const std::string& uid)
 
 // 不勾选「导入另一个账号」时走默认 profile; 成功抓到账号后把这份站点数据复制到
 // debug/record/<roleId>, 以后勾选同一 UID 就能直接复用. 复制失败不影响本次导入.
-void SaveProfileSnapshot(const std::filesystem::path& source, const std::filesystem::path& target, const std::string& role_id)
+// refresh 为 true 表示本次在默认 profile 里重新登录过, 旧快照里的登录态已过期, 需要整份替换.
+void SaveProfileSnapshot(
+    const std::filesystem::path& source,
+    const std::filesystem::path& target,
+    const std::string& role_id,
+    bool refresh)
 {
     if (source.empty() || target.empty()) {
         return;
     }
     std::error_code ec;
-    if (!std::filesystem::exists(source) || std::filesystem::exists(target)) {
+    if (!std::filesystem::exists(source)) {
         return;
+    }
+    if (std::filesystem::exists(target)) {
+        if (!refresh) {
+            return;
+        }
+        std::filesystem::remove_all(target, ec);
+        if (ec) {
+            LogWarn << "ZiplineImport: remove the stale profile snapshot failed" << VAR(MaskUid(role_id))
+                    << VAR(ec.message());
+            return;
+        }
+        LogInfo << "ZiplineImport: refreshing the saved profile after a new sign-in" << VAR(MaskUid(role_id));
     }
     std::filesystem::create_directories(target.parent_path(), ec);
     if (ec) {
@@ -652,6 +669,10 @@ MaaBool MAA_CALL ZiplineImportActionRun(
         return false;
     }
 
+#ifdef _WIN32
+    // 本次是否命中了保存的登录态（仅 WebView2 按 UID 分 profile 时有意义）
+    bool saved_session = false;
+#endif
 #ifdef MAAEND_HAVE_WEBKIT
     auto webview = std::make_shared<WebKitWindow>();
     webview->SetSize(param.width, param.height);
@@ -671,7 +692,6 @@ MaaBool MAA_CALL ZiplineImportActionRun(
     webview->SetSize(param.width, param.height);
     webview->SetURL(param.url);
     webview->SetClearWebData(param.clear_login);
-    bool saved_session = false;
 #ifdef _WIN32
     if (!param.uid.empty()) {
         // 勾选清空登录态时会先删数据, 这次不能算命中
@@ -837,12 +857,20 @@ MaaBool MAA_CALL ZiplineImportActionRun(
         LogInfo << "ZiplineImport: captured account differs from the entered uid, using the captured one"
                 << VAR(MaskUid(param.uid)) << VAR(MaskUid(persisted.role_id));
     }
-    // 不勾选时走默认 profile; 成功后按实际 roleId 留一份快照, 供以后勾选 UID 时免登录
+    // 指定 UID 时 WebView2 直接写 debug/record/<uid>; 登录态过期后重新登录由浏览器写回同一目录,
+    // 这里只补一条日志, 说明保存的登录态已经刷新.
+    if (login_transition_seen && saved_session) {
+        LogInfo << "ZiplineImport: signed in again, the saved sign-in was refreshed"
+                << VAR(param.uid.empty() ? std::string {} : MaskUid(param.uid));
+    }
+    // 不勾选时走默认 profile; 成功后按实际 roleId 留一份快照, 供以后勾选 UID 时免登录.
+    // 默认 profile 里重新登录过时旧快照已过期, 需要整份刷新.
     if (persisted.total > 0 && param.uid.empty() && !persisted.role_id.empty()) {
         SaveProfileSnapshot(
             WebView2::UserDataFolder(std::string {}),
             WebView2::UserDataFolder(persisted.role_id),
-            persisted.role_id);
+            persisted.role_id,
+            login_transition_seen);
     }
 #endif
     if (persisted.total > 0) {
