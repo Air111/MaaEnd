@@ -56,6 +56,19 @@
             }
         },
         {
+            "name": "Win32-NoGame",
+            "label": "$controller.Win32-NoGame.label",
+            "description": "$controller.Win32-NoGame.description",
+            "type": "Win32",
+            "win32": {
+                "class_regex": ".*",
+                "window_regex": ".*",
+                "screencap": "ScreenDC",
+                "mouse": "SendMessage",
+                "keyboard": "SendMessage"
+            }
+        },
+        {
             "name": "ADB",
             "label": "$controller.ADB.label",
             "description": "$controller.ADB.description",

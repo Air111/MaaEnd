@@ -14,6 +14,7 @@
                 "Linux-Wlroots",
                 "Win32-Front",
                 "CloudWeb",
+                "Win32-NoGame",
                 "ADB",
                 "PlayCover"
             ],
@@ -30,6 +31,7 @@
             "controller": [
                 "Win32-Front",
                 "CloudWeb",
+                "Win32-NoGame",
                 "ADB",
                 "PlayCover"
             ],
@@ -52,6 +54,7 @@
             "type": "input",
             "controller": [
                 "Win32-Front",
+                "Win32-NoGame",
                 "ADB",
                 "PlayCover"
             ],
