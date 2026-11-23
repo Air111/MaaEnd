@@ -410,6 +410,38 @@
             }
         }
     },
+    "UseConsumableTacticalBackpackTransferBegin": {
+        "action": {
+            "type": "KeyDown",
+            "param": {
+                "key": 56
+            }
+        }
+    },
+    "UseConsumableTacticalBackpackTransferRelease": {
+        "action": {
+            "type": "KeyUp",
+            "param": {
+                "key": 56
+            }
+        }
+    },
+    "UseConsumableTacticalDepotTransferBegin": {
+        "action": {
+            "type": "KeyDown",
+            "param": {
+                "key": 56
+            }
+        }
+    },
+    "UseConsumableTacticalDepotTransferRelease": {
+        "action": {
+            "type": "KeyUp",
+            "param": {
+                "key": 56
+            }
+        }
+    },
     "VisitFriendsPressStockRedistribution": {
         "action": {
             "type": "ClickKey",
@@ -759,6 +791,22 @@
             "type": "ClickKey",
             "param": {
                 "key": 40
+            }
+        }
+    },
+    "__ScenePrivateWorldEnterMenuMissionKey": {
+        "action": {
+            "type": "ClickKey",
+            "param": {
+                "key": 38
+            }
+        }
+    },
+    "__ScenePrivateWorldEnterMenuRegionalDevelopmentKey": {
+        "action": {
+            "type": "ClickKey",
+            "param": {
+                "key": 16
             }
         }
     },

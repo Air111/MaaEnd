@@ -1,7 +1,7 @@
 # Development Manual - DeliveryJobs
 
 `DeliveryJobs` (task name "Delivery Jobs") traverses all depot nodes according to the regions and depot nodes configured by the user, packing cargo for delivery jobs, accepting the jobs, and transferring them; optionally it hands the cargo to [AutoDelivery](../components/auto-delivery.md) for fully automatic delivery.  
-This document was updated on October 29, 2026.
+This document was updated on November 23, 2026.
 
 Three structural conventions of this task:
 
@@ -66,7 +66,8 @@ flowchart TD
     QD -->|"It does not exist (depot node below level 3, only the yellow 开始运送 (Start Delivery) button)"| RB
     QT --> QTC["DeliveryJobsQuickTransferConfirm\nConfirms 快速转交 (Quick Transfer)"]
     QTC --> QTR["DeliveryJobsQuickTransferReward\nCloses the 获得奖励 (Rewards) screen"]
-    QTR --> QTB["DeliveryJobsQuickTransferBackToLocalDepotNode\nClicks back to the 本地仓储节点 (Local Depot Node) tab"]
+    QTR --> QRes["DeliveryJobsResetQuickTransferBackHit\nClears the tab-click hit count"]
+    QRes --> QTB["DeliveryJobsQuickTransferBackToLocalDepotNode\nClicks back to the 本地仓储节点 (Local Depot Node) tab (clicks again if the switch does not happen, at most 3 times)"]
     QTB --> Local["InLocalDepotNode\nBack to the local depot node (does not pass through GoToDepot)"]
     RB -->|"Stops on a prompt page"| Quick["DeliveryJobsDeliverQuickly / DeliveryJobsClickScreenToContinue\nDismisses prompts such as 尽快送达 (Deliver Quickly)"]
     RB --> Back["DeliveryJobsBackToDepot\nWaits until back in the overworld (InWorld)"]
@@ -105,13 +106,17 @@ Within the same depot node, there are three independent paths for "handing over 
 
 | # | Trigger | Nodes passed through | When this path is taken |
 | --- | --- | --- | --- |
-| 1 | The Redistribution Bid screen offers the white `快速转交` (Quick Transfer) button next to the yellow `开始运送` (Start Delivery) button | `DeliveryJobsDecideQuickTransfer` → `DeliveryJobsQuickTransfer` → `DeliveryJobsQuickTransferConfirm` → `DeliveryJobsQuickTransferReward` → `DeliveryJobsQuickTransferBackToLocalDepotNode` | "Accept and Transfer" (as the depot node mode or as the bid action) while the depot node is level 3 or above: the packing flow hands the job over on the spot without accepting it |
+| 1 | The Redistribution Bid screen offers the white `快速转交` (Quick Transfer) button next to the yellow `开始运送` (Start Delivery) button | `DeliveryJobsDecideQuickTransfer` → `DeliveryJobsQuickTransfer` → `DeliveryJobsQuickTransferConfirm` → `DeliveryJobsQuickTransferReward` → `DeliveryJobsResetQuickTransferBackHit` → `DeliveryJobsQuickTransferBackToLocalDepotNode` | "Accept and Transfer" (as the depot node mode or as the bid action) while the depot node is level 3 or above: the packing flow hands the job over on the spot without accepting it |
 | 2 | After loop re-entry, entry A `查看任务` (Check Mission) is hit | `DeliveryJobsClickTransferJob` → `DeliveryJobsConfirmTaskTransfer` | Under "Accept and Transfer", when entry A is enabled and the depot node still has `max_hit` quota left ("Fully Automatic Delivery" re-points entry A's `next` to delivery) |
 | 3 | The Redistribution Bid screen detects cargo already awaiting delivery | `DeliveryJobsOngoingDelivery` → `DeliveryJobsEnsureOngoingDeliveryMission` → `DeliveryJobsWaitOngoingMissionDetail`: **first decide whether this job can be transferred** (`转交运送委托` (Transfer Delivery Job) in the details = a normally accepted job; absent = a seized job). Only a transferable job goes through `DeliveryJobsOngoingDeliveryFor{Depot}` according to the mode of the depot node it belongs to ("Accept and Transfer" → `DeliveryJobsTransferOngoingJob`; "Fully Automatic Delivery" and "Handle by Bid" → `DeliveryJobsAutoDelivery{DepotId}`; any other mode → `DeliveryJobsSkipOngoingDelivery`); a seized job always goes through `DeliveryJobsTransferUnavailable` → `DeliveryJobsDeliverOngoingByAutoDelivery` to be delivered | When the job in hand has not been handed over yet and the flow enters this depot node's packing / Redistribution Bid flow again |
 
 > [!NOTE]
 >
 > **Path 1 exists only when the depot node is level 3 or above; below level 3 it automatically falls back to accepting the job.** The white `快速转交` (Quick Transfer) button is unlocked at depot node level 3, so below level 3 the Redistribution Bid screen only has the yellow `开始运送` (Start Delivery) button. That is why "Accept and Transfer" enters `DeliveryJobsDecideQuickTransfer` first: it uses `And(YellowConfirmButtonType1, DeliveryJobsInCargoRedistributionBid)` to confirm the bottom button row has been rendered (the yellow `开始运送` (Start Delivery) button exists at every level, so it serves as the "button row is in place" signal), then applies `pre_wait_freezes` to that button row to wait for the screen to settle, and only then tries `DeliveryJobsQuickTransfer` (which matches only the white Quick Transfer button); on a hit it takes path 1, otherwise it falls back to `DeliveryJobsRedistributionBidNextStep` and accepts the job the old way. Which path then transfers the job depends on the configuration: when the depot node's handling mode is "Accept and Transfer", the next round of the region loop hits entry A to transfer (path 2); when "Handle by Bid" uses "Accept and Transfer" as its bid action, `DeliveryJobsReturnAndTransfer{Depot}` leads into [`DeliveryJobsEnter{Depot}PriceDeliveryJob`](#deliveryjobsenterdepotpricedeliveryjob) to transfer, without going through entry A (entry A is disabled under that mode). **Never judge "there is no Quick Transfer button" before the buttons finish rendering**, as that would send a job that should be quick-transferred down the accept path.
+
+> [!NOTE]
+>
+> **The "click back to the local depot node" step at the end of path 1 clicks only the middle of the tab and retries when the switch does not happen.** After the rewards screen closes, the flow stays on the 我转交的委托 (My Transferred Jobs) page and must click the 本地仓储节点 (Local Depot Node) tab at the top-left to return to the depot node screen. `DeliveryJobsQuickTransferBackToLocalDepotNode` first confirms with text recognition that the tab is still there, then uses `target_offset` to shrink the click area by a slice on each side of the text box so that only the icon/text in the middle of the tab is clicked; it also waits for the screen to settle before clicking, so the click cannot land on the closing animation of the rewards screen. **Do not change the click target back to the text box itself**: the click lands on a random point inside the target box, and the text box's left edge sits exactly on the tab's left edge, so when the random point falls outside that edge the game ignores it and the node then waits for `reco_timeout` and fails (the 2026-11-23 11:04 run landed on `(56,77)`). The node also carries `max_hit: 3` and lists itself in `next`, so a click that does not switch the page is retried; `DeliveryJobsResetQuickTransferBackHit` clears its hit count after every Quick Transfer, so each of the five depot nodes gets its own 3 clicks, and the node still times out as before if all 3 clicks fail.
 
 ### `DeliveryJobsEnter{Depot}PriceDeliveryJob`
 

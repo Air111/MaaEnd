@@ -90,6 +90,7 @@ In addition to the 6 fields above, all other parameters can only be read from `c
 | `AvailableQuantityFilter` | `string` or `object` | No | ColorMatch recognition parameters used to preprocess the available-quantity OCR, overriding the `BetterSlidingAvailableQuantityFilter` node. Default: not configured. |
 | `CenterPointOffset` | `int[2]` | No | Click offset relative to the center point of the slider's recognition box `[x, y]`, negative values left/up, positive right/down. The default depends on the controller: `[-10, 0]` on desktop (Win32 / macOS / Linux) and `[-12, 0]` on mobile (ADB / CloudADB / PlayCover). |
 | `ClampTargetToSliderMax` | `bool` | No | When `true`, a target above `sliderMaxQuantity` is clamped to the maximum selectable slider quantity and execution continues. Default `false`. |
+| `QuantityTolerance` | `int` (`>= 1`) | No | Quantity tolerance floor. The effective tolerance is `max(N, 1% of the target)`: finish when the count is within it; otherwise retry with a ~1px slider nudge first, and only then use the ± buttons for the excess. Default: not configured (disabled). |
 | `OutOfRangeOverrideEnable` | `string` | No | When the resolved target is outside the slidable range, enables the specified Pipeline node and returns success; when the field is unset (default `""`), the action fails directly. |
 | `TargetReachableOverrideEnable` | `string` | No | When the resolved target needs no clamping and falls within `[1, sliderMaxQuantity]`, enables the specified Pipeline node. Default `""`. |
 

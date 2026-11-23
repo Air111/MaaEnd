@@ -584,6 +584,15 @@ NaviParam build_navi_param(const json::value& custom_action_param, const NaviPar
     param.enable_sprint = input.enable_sprint_;
     param.enable_local_driver = input.enable_local_driver_;
     param.zipline_enabled = input.zip_;
+    if (const json::value* match_goal = custom_action_param.find_value("zipline_match_goal"); match_goal != nullptr) {
+        if (!read_arrive_point(&param.zipline_match_goal, *match_goal)) {
+            param.zipline_match_goal.reset();
+        }
+    }
+    if (const json::value* match_deck = custom_action_param.find_value("zipline_match_deck_y");
+        match_deck != nullptr && match_deck->is<double>()) {
+        param.zipline_match_deck_y = match_deck->as<double>();
+    }
     param.enable_bootstrap_navmesh = input.enable_bootstrap_navmesh_;
     param.navmesh_file = authored_navmesh_file(custom_action_param, input, param.navmesh_file);
     param.navmesh_snap_radius = authored_snap_radius(custom_action_param, input, param.navmesh_snap_radius);

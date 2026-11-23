@@ -132,6 +132,11 @@ body {
     transform var(--motion);
 }
 
+/* 工具条里的页面入口是 <a>, 不能带链接下划线 */
+a.btn {
+  text-decoration: none;
+}
+
 .btn:active:not(:disabled) {
   transform: translateY(1px);
 }

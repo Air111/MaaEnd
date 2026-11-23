@@ -3,7 +3,7 @@
         {
             "name": "EnvironmentMonitoring",
             "label": "$task.EnvironmentMonitoring.label",
-            "entry": "EnvironmentMonitoringMain",
+            "entry": "EnvironmentMonitoringCaptureUid",
             "description": "$task.EnvironmentMonitoring.description",
             "group": [
                 "regional_development"
@@ -16,7 +16,33 @@
                 "Linux-Wlroots",
                 "PlayCover",
                 "Win32-Front"
+            ],
+            "option": [
+                "EnvironmentMonitoringPreferZipline"
             ]
         }
-    ]
+    ],
+    "option": {
+        "EnvironmentMonitoringPreferZipline": {
+            "type": "switch",
+            "label": "$task.EnvironmentMonitoring.PreferZipline.label",
+            "description": "$task.EnvironmentMonitoring.PreferZipline.description",
+            "cases": [
+                {
+                    "name": "Yes"
+                },
+                {
+                    "name": "No",
+                    "pipeline_override": {
+                        "SavedZiplineRoutePreference": {
+                            "attach": {
+                                "prefer_saved": false
+                            }
+                        }
+                    }
+                }
+            ],
+            "default_case": "Yes"
+        }
+    }
 }

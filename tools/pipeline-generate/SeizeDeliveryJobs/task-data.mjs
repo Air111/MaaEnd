@@ -22,8 +22,9 @@ function buildSourceCase({CaseId, MapId, Expected, FilterName}) {
         pipeline_override: {
             __SeizeDeliveryJobsRecoOrigin: {expected: Expected},
             // override 是字段级替换，不是追加：被覆盖的 next 必须把原本要保留的节点一起写全。
-            // 风险知悉拦截（Guard）由「全自动送货」档的后处理路径负责、已有委托由任务入口门控
-            // （SeizeDeliveryJobsCheckOngoingJob）负责，因此都不在这两条 next 里。
+            // 风险知悉拦截（Guard）由「全自动送货」档的后处理路径负责、已有委托的就地判断
+            // （SeizeDeliveryJobsExistDueTask）挂在 __SeizeDeliveryJobsInJobList 的 next 上，
+            // 均不在被覆盖的这两个节点里，因此不写进这两条 next。
             SeizeDeliveryJobsMain: {
                 next: [`SeizeDeliveryJobsEnter${mapName}JobList`],
             },

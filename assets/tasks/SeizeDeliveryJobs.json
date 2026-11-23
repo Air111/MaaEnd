@@ -3,7 +3,7 @@
         {
             "name": "SeizeDeliveryJobs",
             "label": "$task.SeizeDeliveryJobs.label",
-            "entry": "SeizeDeliveryJobsCheckOngoingJob",
+            "entry": "SeizeDeliveryJobsCaptureUid",
             "description": "$task.SeizeDeliveryJobs.description",
             "group": [
                 "regional_development"
@@ -27,6 +27,7 @@
             "option": [
                 "SeizeDeliveryJobsReward",
                 "SeizeDeliveryJobsRefreshLimit",
+                "SeizeDeliveryJobsZiplineAccountUid",
                 "SeizeDeliveryJobsCommissionSource",
                 "SeizeDeliveryJobsPostProcessing"
             ]
@@ -766,6 +767,27 @@
                 }
             ],
             "default_case": "3"
+        },
+        "SeizeDeliveryJobsZiplineAccountUid": {
+            "type": "input",
+            "label": "$task.SeizeDeliveryJobsZiplineAccountUid.label",
+            "description": "$task.SeizeDeliveryJobsZiplineAccountUid.description",
+            "inputs": [
+                {
+                    "name": "Uid",
+                    "label": "$task.SeizeDeliveryJobsZiplineAccountUid.inputs.Uid.label",
+                    "default": "",
+                    "pipeline_type": "string",
+                    "verify": "^(\\d{8,12})?$"
+                }
+            ],
+            "pipeline_override": {
+                "SeizeDeliveryJobsApplyZiplineUid": {
+                    "custom_action_param": {
+                        "uid": "{Uid}"
+                    }
+                }
+            }
         },
         "SeizeDeliveryJobsSpecifyDeliveryPointTestArea": {
             "type": "switch",

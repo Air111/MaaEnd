@@ -15,7 +15,7 @@ function matchingFrame(config, zoneName) {
 /**
  * Unique pseudonymous accounts ordered by their latest import time.
  * @param {Object} records parsed record/Ziplines.json
- * @returns {Array<{accountId:string,fetchedAt:string}>}
+ * @returns {Array<{accountId:string,uid:string,fetchedAt:string}>}
  */
 export function listZiplineAccounts(records) {
   const accounts = new Map();
@@ -23,8 +23,19 @@ export function listZiplineAccounts(records) {
     const accountId = String((map && map.account_id) || "");
     if (!accountId) continue;
     const fetchedAt = String((map && map.fetched_at) || "");
+    const uid = String((map && map.uid) || "");
     const previous = accounts.get(accountId);
-    if (!previous || fetchedAt > previous.fetchedAt) accounts.set(accountId, {accountId, fetchedAt});
+    if (!previous) {
+      accounts.set(accountId, {accountId, uid, fetchedAt});
+      continue;
+    }
+    // 同一账号的每条记录都带同一个 uid; 旧记录没有 uid 时用任意一条有值的补上
+    if (fetchedAt > previous.fetchedAt) {
+      previous.fetchedAt = fetchedAt;
+      if (uid) previous.uid = uid;
+    } else if (!previous.uid && uid) {
+      previous.uid = uid;
+    }
   }
   return [...accounts.values()].sort(
     (left, right) => right.fetchedAt.localeCompare(left.fetchedAt) || left.accountId.localeCompare(right.accountId),
@@ -36,13 +47,15 @@ export function latestZiplineAccountId(records) {
   return listZiplineAccounts(records)[0]?.accountId || "";
 }
 
-/** Compact account label suitable for the planning dropdown. */
+/** Compact account label suitable for the planning dropdown; prefer the raw uid when the record has one. */
 export function ziplineAccountLabel(account) {
   const accountId = String((account && account.accountId) || "");
+  const uid = String((account && account.uid) || "");
   const shortId = accountId.length > 10 ? `${accountId.slice(0, 6)}…${accountId.slice(-4)}` : accountId;
   const fetchedAt = String((account && account.fetchedAt) || "");
   const importedDate = /^\d{4}-\d{2}-\d{2}/.exec(fetchedAt)?.[0] || "";
-  return `账号 ${shortId}${importedDate ? ` · ${importedDate}` : ""}`;
+  const name = uid ? `UID ${uid}` : `账号 ${shortId}`;
+  return `${name}${importedDate ? ` · ${importedDate}` : ""}`;
 }
 
 /**

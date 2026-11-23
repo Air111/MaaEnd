@@ -58,6 +58,8 @@ pnpm exec maa-pipeline-generate --config terminals-config.json
         // （不含 HEADING，朝向仍由 Heading 字段追加）。
         // 普通传送必须有 NavZoneId / NavAssert 用来判断是否调用 EnterMap；
         // 快捷传送不执行起点断言，可同时省略二者。
+        // NavPath 中带 "zip_only": true 的 NAVMESH/RUN 点只进入滑索分支，
+        // 普通 GoTo 路线会把它过滤掉；用于只让保存路径经过的途径点。
         // 如果传送点可以直接拍照，则整组字段一起省略。
     "FightAfterMove": [{ "action": "ZONE", "zone_id": "..." }, [x3, y3], [x4, y4]],
         // 可选；沿途稳定遇敌时，首次寻路后执行 AutoFight，再沿这条独立 path 归位。
@@ -101,5 +103,7 @@ pnpm exec maa-pipeline-generate --config terminals-config.json
 | 寻路 | `NavPath`；普通传送再加 `NavZoneId`，可选 `Heading` / `FightAfterMove` | `NavAssert`，快捷传送可省略 | `MapNavigateAction` 按 `NavPath` 寻路 →（可选清场并沿独立路径归位）→ 拍照 |
 
 `Replace` 可用于所有已适配路线，不改变路线类型。直拍必须经过游戏实测确认，不能用来代替尚未录制的路线数据。寻路路线一律用 `NavPath`，普通传送再补 `NavZoneId` / `NavAssert`。拍照目标未命中时由公共 `CameraScanAction` 自动执行九宫格与 fallback 镜头扫描，不需要路线级镜头方向配置。
+
+寻路路线且终点是 base 像素坐标时，生成器会额外生成滑索分支（`${Id}GoTarget*`、`${Id}MoveWithZipline`、`${Id}TeleportDone`），由 `ZiplineRouteGoAction` 在运行时读取 `ZiplineRoutes.json` 决定。
 
 > 完整维护流程见 `docs/zh_cn/developers/tasks/environment-monitoring-maintain.md`。

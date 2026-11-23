@@ -319,14 +319,6 @@
                 {
                     "action": "NAVMESH",
                     "target": [
-                        1252.24,
-                        1744.17
-                    ],
-                    "required": true
-                },
-                {
-                    "action": "NAVMESH",
-                    "target": [
                         1383.764,
                         1633.923
                     ],
@@ -498,14 +490,6 @@
                 {
                     "action": "NAVMESH",
                     "target": [
-                        1252.24,
-                        1744.17
-                    ],
-                    "required": true
-                },
-                {
-                    "action": "NAVMESH",
-                    "target": [
                         1083.307,
                         1455.27
                     ],
@@ -671,14 +655,6 @@
                 {
                     "action": "ZONE",
                     "zone_id": "Wuling_Base"
-                },
-                {
-                    "action": "NAVMESH",
-                    "target": [
-                        1252.24,
-                        1744.17
-                    ],
-                    "required": true
                 },
                 {
                     "action": "NAVMESH",

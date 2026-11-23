@@ -545,6 +545,41 @@
         ],
         "post_wait_freezes": 200
     },
+    "__ScenePrivateTaskTrackedMissionEnterMap": {
+        "desc": "任务追踪详情页：点定位图标进入带前往传送按钮的任务地图",
+        "recognition": "And",
+        "all_of": [
+            "TrackedMissionMapButton"
+        ],
+        "pre_delay": 0,
+        "action": "Click",
+        "post_wait_freezes": 300,
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "__ScenePrivateTaskTrackedMapEnterMapOverview"
+        ]
+    },
+    "__ScenePrivateTaskTrackedMapEnterMapOverview": {
+        "desc": "任务追踪地图：按一次 ESC 回干净地图，再点地图总览",
+        "recognition": "And",
+        "all_of": [
+            "QuickTeleportButton"
+        ],
+        "pre_delay": 0,
+        "action": {
+            "type": "ClickKey",
+            "param": {
+                "key": 27
+            }
+        },
+        "post_wait_freezes": 300,
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "__ScenePrivateMapAnyEnterMapOverview"
+        ]
+    },
     "__ScenePrivateWorldEnterMapAny": {
         "desc": "在大世界界面，进入地图界面",
         "recognition": "And",

@@ -327,6 +327,117 @@
             "Node.Recognition.Succeeded": "$task.EnvironmentMonitoring.not_adapted"
         }
     },
+    "PeachTreeAtBabblesSHomeGoTarget": {
+        "desc": "判断是否使用保存的滑索路径前往念念家的桃树；没有保存路径时走原有传送流程",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                258.16,
+                207.3
+            ],
+            "zip_move": "PeachTreeAtBabblesSHomeMoveWithZipline",
+            "fallback": "GoToPeachTreeAtBabblesSHome"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "PeachTreeAtBabblesSHomeMoveWithZipline",
+            "GoToPeachTreeAtBabblesSHomeMove"
+        ]
+    },
+    "PeachTreeAtBabblesSHomeGoTargetAfterTrack": {
+        "desc": "刚点击追踪，判断是否使用保存的滑索路径前往念念家的桃树",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                258.16,
+                207.3
+            ],
+            "zip_move": "PeachTreeAtBabblesSHomeMoveWithZipline",
+            "fallback": "PeachTreeAtBabblesSHomeInQuickTeleportMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "PeachTreeAtBabblesSHomeMoveWithZipline",
+            "GoToPeachTreeAtBabblesSHomeMove"
+        ]
+    },
+    "PeachTreeAtBabblesSHomeGoTargetAfterTracked": {
+        "desc": "任务已在追踪中，判断是否使用保存的滑索路径前往念念家的桃树",
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "ZiplineRouteGoAction",
+        "custom_action_param": {
+            "zone_name": "map02base",
+            "goal": [
+                258.16,
+                207.3
+            ],
+            "zip_move": "PeachTreeAtBabblesSHomeMoveWithZipline",
+            "fallback": "PeachTreeAtBabblesSHomeOpenTrackedMissionMap"
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "PeachTreeAtBabblesSHomeMoveWithZipline",
+            "GoToPeachTreeAtBabblesSHomeMove"
+        ]
+    },
+    "PeachTreeAtBabblesSHomeMoveWithZipline": {
+        "desc": "沿保存的滑索路径前往念念家的桃树",
+        // 只有 ZiplineRouteGoAction 命中手工链时才打开；默认禁用，保证没有保存路径时不启用滑索。
+        "enabled": false,
+        "pre_delay": 0,
+        "action": "Custom",
+        "custom_action": "MapNavigateAction",
+        "custom_action_param": {
+            "path": [
+                {
+                    "action": "NAVMESH",
+                    "target": [
+                        258.16,
+                        207.3
+                    ],
+                    "target_tier": "Wuling_L4_328"
+                },
+                {
+                    "action": "HEADING",
+                    "angle": 92
+                }
+            ],
+            "zip": true
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
+            "PeachTreeAtBabblesSHomeTakePhoto"
+        ],
+        // 滑索导航失败时退回同一目标点的步行路线。
+        "on_error": [
+            "GoToPeachTreeAtBabblesSHomeMove"
+        ],
+        "focus": {
+            "Node.Action.Succeeded": {
+                "trace": true
+            },
+            "Node.Action.Failed": {
+                "trace": true
+            }
+        }
+    },
+    "PeachTreeAtBabblesSHomeTeleportDone": {
+        "desc": "传送流程结束，交回目标点决策节点继续",
+        "pre_delay": 0,
+        "post_delay": 0,
+        "rate_limit": 0
+    },
     "GoToPeachTreeAtBabblesSHome": {
         "desc": "前往念念家的桃树，先回到大世界再进行判断",
         "pre_delay": 0,

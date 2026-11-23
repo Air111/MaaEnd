@@ -512,7 +512,7 @@
         "NavPath": [
             {
                 "action": "ZONE",
-                "zone_id": "Wuling_L4_328"
+                "zone_id": "Wuling_Base"
             },
             {
                 "action": "NAVMESH",
@@ -567,6 +567,16 @@
             {
                 "action": "ZONE",
                 "zone_id": "Wuling_Base"
+            },
+            {
+                "action": "NAVMESH",
+                "target": [
+                    345,
+                    2172
+                ],
+                "target_deck_y": 273.3,
+                "required": true,
+                "zip_only": true
             },
             {
                 "action": "NAVMESH",

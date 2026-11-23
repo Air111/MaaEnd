@@ -13,7 +13,12 @@
         "rate_limit": 0,
         "next": [
             "OutpostTradingRegisterLocationRefugeeCamp"
-        ]
+        ],
+        // 「忽略据点发展值」由任务选项覆写 attach；attach 在选项覆盖中按字段合并，
+        // 不会被「强制刷新干员缓存」的 custom_action_param 整体替换。
+        "attach": {
+            "ignore_outpost_prosperity": false
+        }
     },
     "OutpostTradingOperatorSessionReady": {
         "desc": "自动选择干员会话已就绪",

@@ -5,7 +5,8 @@
 namespace zipline
 {
 
-// 被动复制官方地图页取回的滑索标记, 不读也不存任何凭据, attach.clear_login 为真时清空浏览器登录态
+// 被动复制官方地图页取回的滑索标记; 默认 profile 在 agent/<exe>.WebView2, attach.uid 选择
+// debug/record/<uid> 的账号 profile, attach.clear_login 仍可由 API 用来清空该 profile 的登录态
 MaaBool MAA_CALL ZiplineImportActionRun(
     MaaContext* context,
     MaaTaskId task_id,

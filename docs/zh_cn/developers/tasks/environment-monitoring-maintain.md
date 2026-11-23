@@ -15,7 +15,7 @@
 | 模块 | 路径 | 作用 |
 | ------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 任务入口 | `assets/tasks/EnvironmentMonitoring.json` | interface 任务定义（无可配置选项，控制器 = Win32-Front / Linux / ADB / CloudADB / PlayCover） |
-| 主流程 Pipeline | `assets/resource/pipeline/EnvironmentMonitoring.json` | 主入口节点 `EnvironmentMonitoringMain`，循环识别两个监测终端 |
+| 主流程 Pipeline | `assets/resource/pipeline/EnvironmentMonitoring.json` | 主入口节点 `EnvironmentMonitoringCaptureUid`（先补一次账号识别）→ `EnvironmentMonitoringMain`，循环识别两个监测终端 |
 | 终端分组（生成） | `assets/resource/pipeline/EnvironmentMonitoring/Terminals.json` | 城郊监测终端 / 首墩监测终端的入口节点与各自的观察点 `next` 列表（**生成**） |
 | 终端跳转 | `assets/resource/pipeline/EnvironmentMonitoring/Locations.json` | `EnvironmentMonitoringGoTo*` 与 `Select*` 节点，从主菜单进入对应终端 |
 | 拍照流程 | `assets/resource/pipeline/EnvironmentMonitoring/TakePhoto.json` | 进入拍照模式、调整朝向、识别拍照按钮、达成目标后回到终端 |
@@ -52,6 +52,8 @@ EnvironmentMonitoringMain
        │         └─ EnvironmentMonitoringTerminalFinish
        └─ EnvironmentMonitoringFinish
 ```
+
+任务入口是 `EnvironmentMonitoringCaptureUid`，先补一次账号识别再进入 `EnvironmentMonitoringMain`；寻路路线终点落在 base 像素时，生成器会生成滑索分支，命中手工滑索链时优先用链上的传送入口与滑索导航，否则回退原来的传送/步行流程。任务选项「优先使用滑索」（`SavedZiplineRoutePreference.attach.prefer_saved`）控制是否尝试这条分支：关闭时不会读取已记录的滑索路线，直接走原有传送/步行。若手工链保存了自定义拍照点（`ZiplineRoutes.json` 的 `photo_goal` / `photo_heading`），`ZiplineRouteGoAction` 会把滑索分支的 `zip_move` 改成「保留 ZONE、去掉原途经点、以 `photo_goal` 为 NAVMESH 终点、以 `photo_heading` 为 HEADING」，并通过 `zipline_match_goal` 仍按原观察点的 goal 命中同一条链；步行分支不变。
 
 每个观察点 `{Id}Job` 内部的链路（由 `template.json` 渲染）：
 
@@ -180,8 +182,9 @@ MysteriousCryptidGraffiti         → 谜之生物的涂鸦
 | `OcrReplace` | 由 `routes.json[*].Replace` 透传到 `Check${Id}Text.replace` 与 `In${Id}Mission.replace`；用于按任务配置任务列表和任务详情页 OCR 的易混字符替换，不影响路线是否已适配的判断 |
 | `ExpectedText` | 由 `environment_monitoring.json` 的 `mission.names` 自动展开（5 语言，英文转柔性正则） |
 | `InExpectedText` | 由 `environment_monitoring.json` 的 `mission.shot_target_names` 自动展开；其中的引号与撇号统一放宽为可缺省的任意单字符 `.?`（位于末尾的直接去掉），避免移动端 OCR 认不出引号导致拍照标题匹配失败 |
-| `TrackOrGoToNext` / `AfterTrackNext` / `AfterAlreadyTrackedNext` | 由 `data.mjs` 根据路线是否完整及 `QuickTeleport` 自动决定：默认进入 `GoTo${Id}`；快捷传送时，开始追踪后等待任务地图，已追踪则先点击定位图标打开任务地图；未适配时进入 `${Id}NotAdapted` |
-| `GoToNext` / `AfterTeleportDescription` / `AfterTeleportNext` | 由 `data.mjs` 根据传送入口和路线类型自动决定：传送后直拍始终执行真实传送，配置 `Heading` 时先进入 `GoTo${Id}Move` 调整朝向，否则直接进入 `${Id}TakePhoto`；寻路路线传送后直接进入 `GoTo${Id}Move` |
+| `TrackOrGoToNext` / `AfterTrackNext` / `AfterAlreadyTrackedNext` | 由 `data.mjs` 根据路线是否完整及 `QuickTeleport` 自动决定：默认进入 `GoTo${Id}`；快捷传送时，开始追踪后等待任务地图，已追踪则先点击定位图标打开任务地图；未适配时进入 `${Id}NotAdapted`；生成滑索分支时改走 `${Id}GoTarget*` |
+| `GoToNext` / `AfterTeleportDescription` / `AfterTeleportNext` | 由 `data.mjs` 根据传送入口和路线类型自动决定：传送后直拍始终执行真实传送，配置 `Heading` 时先进入 `GoTo${Id}Move` 调整朝向，否则直接进入 `${Id}TakePhoto`；寻路路线传送后直接进入 `GoTo${Id}Move`；生成滑索分支时改走 `${Id}TeleportDone` |
+| `ZiplineGoParam` / `ZipRouteActionParam` | 滑索分支的 `ZiplineRouteGoAction` 参数与带 `zip: true` 的移动参数；仅生成的滑索分支使用 |
 
 ### 终端分组：`terminals-config.json`
 

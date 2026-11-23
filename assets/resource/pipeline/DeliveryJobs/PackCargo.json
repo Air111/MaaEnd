@@ -603,32 +603,66 @@
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
+            "DeliveryJobsResetQuickTransferBackHit"
+        ]
+    },
+    "DeliveryJobsResetQuickTransferBackHit": {
+        "desc": "每次快速转交结束后清掉「点回本地仓储节点」的命中计数，让每个仓储节点都能重新点满 3 次",
+        "pre_delay": 0,
+        "action": {
+            "type": "Custom",
+            "param": {
+                "custom_action": "ClearHitCount",
+                "custom_action_param": {
+                    "nodes": [
+                        "DeliveryJobsQuickTransferBackToLocalDepotNode"
+                    ]
+                }
+            }
+        },
+        "post_delay": 0,
+        "rate_limit": 0,
+        "next": [
             "DeliveryJobsQuickTransferBackToLocalDepotNode"
         ]
     },
     "DeliveryJobsQuickTransferBackToLocalDepotNode": {
-        "desc": "关掉奖励后停在我转交的委托页，点回「本地仓储节点」标签页",
+        "desc": "关掉奖励后等画面稳定，点回「本地仓储节点」标签页；没切过去就再点，每个仓储节点最多点 3 次",
+        "max_hit": 3,
         "recognition": "And",
         "all_of": [
             "InClaimDeliveryJobsNode",
             // 复用公共文字节点，「本地仓储节点」标签页与主界面标题在同一位置，不需要另建一份
             "CheckLocalDepotNodeText"
         ],
-        // box_index 1：用「本地仓储节点」文字框作为点击目标，点回标签页
+        // box_index 1：点击目标取「本地仓储节点」文字框
         "box_index": 1,
+        "pre_wait_freezes": {
+            "time": 200,
+            "timeout": 2000
+        },
         "pre_delay": 0,
         "action": "Click",
-        // target_offset 为 [dx, dy, dw, dh]：上边界下移 15px、下边界不动，点击区收成文字下半部分
+        // 不要直接点文字框：Click 的落点是目标框内的随机点，而文字框左边界（x=55）就是标签页
+        // 左边缘，随机点会踩到标签页外侧不响应，节点随后干等 20s 超时失败（2026-11-23 11:04
+        // 现场落点 (56,77)）。target_offset 为 [dx, dy, dw, dh]：四边各向内收一截，把随机点
+        // 限制在标签页中段的图标/文字上（标签页本身约 [56,63,274,52]）。
         "target_offset": [
-            0,
-            15,
-            0,
-            -15
+            20,
+            10,
+            -40,
+            -20
         ],
+        "post_wait_freezes": {
+            "time": 200,
+            "timeout": 2000
+        },
         "post_delay": 0,
         "rate_limit": 0,
         "next": [
-            "InLocalDepotNode"
+            "InLocalDepotNode",
+            // 点击没生效时仍停在「我转交的委托」页，命中自己再点一次；max_hit 用完后按原来的方式超时失败
+            "DeliveryJobsQuickTransferBackToLocalDepotNode"
         ]
     },
     "DeliveryJobsDeliverQuickly": {
