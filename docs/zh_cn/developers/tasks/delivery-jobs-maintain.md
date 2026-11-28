@@ -1,7 +1,7 @@
 # 开发手册 - DeliveryJobs 转交委托
 
 `DeliveryJobs`（任务名「转交委托」）按用户配置的地区与仓储节点遍历全部仓储节点，完成送货委托的装箱、接取与转交，可选把货物交给 [AutoDelivery](../components/auto-delivery.md) 全自动送掉。  
-该文档更新于 2026 年 11 月 23 日。
+该文档更新于 2026 年 10 月 29 日。
 
 本任务的三条结构性约定：
 
@@ -66,8 +66,7 @@ flowchart TD
     QD -->|"没有（仓储节点未满 3 级，只有黄底「开始运送」）"| RB
     QT --> QTC["DeliveryJobsQuickTransferConfirm\n确认快速转交"]
     QTC --> QTR["DeliveryJobsQuickTransferReward\n关闭「获得奖励」界面"]
-    QTR --> QRes["DeliveryJobsResetQuickTransferBackHit\n清「点回标签页」的命中计数"]
-    QRes --> QTB["DeliveryJobsQuickTransferBackToLocalDepotNode\n点回「本地仓储节点」标签页（没切过去就再点，最多 3 次）"]
+    QTR --> QTB["DeliveryJobsQuickTransferBackToLocalDepotNode\n点回「本地仓储节点」标签页"]
     QTB --> Local["InLocalDepotNode\n回本地仓储节点（不经过 GoToDepot）"]
     RB -->|"停在提示页"| Quick["DeliveryJobsDeliverQuickly / DeliveryJobsClickScreenToContinue\n点掉「尽快送达」等提示"]
     RB --> Back["DeliveryJobsBackToDepot\n等回到大世界（InWorld）"]
@@ -106,17 +105,13 @@ flowchart TD
 
 | # | 触发方式 | 经过的节点 | 何时走这条 |
 | --- | ------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------ |
-| 1 | 调度申请界面并排给出白底「快速转交」与黄底「开始运送」 | `DeliveryJobsDecideQuickTransfer` → `DeliveryJobsQuickTransfer` → `DeliveryJobsQuickTransferConfirm` → `DeliveryJobsQuickTransferReward` → `DeliveryJobsResetQuickTransferBackHit` → `DeliveryJobsQuickTransferBackToLocalDepotNode` | 「接取并转交」（仓储节点处理方式或报价动作）且该仓储节点满 3 级：装箱流程里当场把委托交出去，不接取 |
+| 1 | 调度申请界面并排给出白底「快速转交」与黄底「开始运送」 | `DeliveryJobsDecideQuickTransfer` → `DeliveryJobsQuickTransfer` → `DeliveryJobsQuickTransferConfirm` → `DeliveryJobsQuickTransferReward` → `DeliveryJobsQuickTransferBackToLocalDepotNode` | 「接取并转交」（仓储节点处理方式或报价动作）且该仓储节点满 3 级：装箱流程里当场把委托交出去，不接取 |
 | 2 | 循环重入后命中入口 A「查看任务」 | `DeliveryJobsClickTransferJob` → `DeliveryJobsConfirmTaskTransfer` | 「接取并转交」下入口 A 启用且该仓储节点还有 `max_hit` 名额时（「全自动送货」把入口 A 的 `next` 改接到送货） |
 | 3 | 调度申请界面识别到已有待运送货物 | `DeliveryJobsOngoingDelivery` → `DeliveryJobsEnsureOngoingDeliveryMission` → `DeliveryJobsWaitOngoingMissionDetail`：**先判这条委托能不能转交**（详情里有「转交运送委托」= 普通接取的委托；没有 = 抢来的）。能转交才按它归属仓储节点的方式走 `DeliveryJobsOngoingDeliveryFor{Depot}`（「接取并转交」→ `DeliveryJobsTransferOngoingJob`；「全自动送货」与「按报价处理」→ `DeliveryJobsAutoDelivery{DepotId}`；其余方式 → `DeliveryJobsSkipOngoingDelivery`）；抢来的一律走 `DeliveryJobsTransferUnavailable` → `DeliveryJobsDeliverOngoingByAutoDelivery` 送掉 | 手里的委托还没有交出去，又进了这个仓储节点的装箱/调度申请流程时 |
 
 > [!NOTE]
 >
 > **路径 1 只在仓储节点满 3 级时存在，未满 3 级自动回退接取。** 白底「快速转交」是 3 级仓储节点才解锁的按钮，未满 3 级时调度申请界面只有黄底「开始运送」。所以「接取并转交」先进 `DeliveryJobsDecideQuickTransfer`：它用 `And(YellowConfirmButtonType1, DeliveryJobsInCargoRedistributionBid)` 确认底部按钮行已经渲染（黄底「开始运送」任何等级都有，用它当「按钮行已就位」的信号），再对按钮行做 `pre_wait_freezes` 等画面稳定，稳定后先试 `DeliveryJobsQuickTransfer`（只认白底快速转交），命中就走路径 1，否则回退 `DeliveryJobsRedistributionBidNextStep` 按老流程接取。回退接取后由哪条路转交随配置不同：仓储节点处理方式是「接取并转交」时由地区循环下一轮命中入口 A 转交（路径 2）；「按报价处理」的报价动作是「接取并转交」时由 `DeliveryJobsReturnAndTransfer{Depot}` 进入 [`DeliveryJobsEnter{Depot}PriceDeliveryJob`](#deliveryjobsenterdepotpricedeliveryjob) 转交，不经过入口 A（该方式下入口 A 停用）。**不要在按钮渲染完成前就判「没有快速转交」**，那会把本该快速转交的委托误走接取。
-
-> [!NOTE]
->
-> **路径 1 收尾的「点回本地仓储节点」只点标签页中段，没切过去会重试。** 关掉奖励后停在「我转交的委托」页，必须点左上角「本地仓储节点」标签页才能回到仓储节点界面。`DeliveryJobsQuickTransferBackToLocalDepotNode` 先用文字识别确认标签页还在，再用 `target_offset` 把点击区从文字框四边各收一截，只点标签页中段的图标/文字；点击前还等画面静止，避免点在奖励界面的关闭动画上。**不要把点击目标改回文字框本身**：`Click` 的落点是目标框内的随机点，而文字框左边界正好压在标签页左边缘上，随机点踩到边缘外时游戏不响应，节点随后干等 `reco_timeout` 超时失败（2026-11-23 11:04 的落点就是 `(56,77)`）。节点还带 `max_hit: 3` 并把自身排在 `next` 里，一轮没切过去就再点一次；`DeliveryJobsResetQuickTransferBackHit` 在每次快速转交结束后清掉它的命中计数，让 5 个仓储节点各有点 3 次的机会，3 次都没切过去仍按原样超时失败。
 
 ### `DeliveryJobsEnter{Depot}PriceDeliveryJob`
 
