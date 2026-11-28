@@ -54,6 +54,7 @@
             "type": "input",
             "controller": [
                 "Win32-Front",
+                "CloudWeb",
                 "Win32-NoGame",
                 "ADB",
                 "PlayCover"
@@ -319,6 +320,17 @@
                         "ZiplineImportMain": {
                             "attach": {
                                 "include_map02_lv010": true
+                            }
+                        }
+                    }
+                },
+                {
+                    "name": "OldDam",
+                    "label": "$global.region.OldDam",
+                    "pipeline_override": {
+                        "ZiplineImportMain": {
+                            "attach": {
+                                "include_map02_lv011": true
                             }
                         }
                     }

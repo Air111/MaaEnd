@@ -242,6 +242,14 @@
             }
         }
     },
+    "MapNavigatorZiplineE": {
+        "action": {
+            "type": "ClickKey",
+            "param": {
+                "key": 14
+            }
+        }
+    },
     "ProdManualOpenInMain": {
         "action": {
             "type": "KeyDown",
@@ -795,6 +803,14 @@
         }
     },
     "__ScenePrivateLoginCloseDialog": {
+        "action": {
+            "type": "ClickKey",
+            "param": {
+                "key": 53
+            }
+        }
+    },
+    "__ScenePrivateTaskTrackedMapEnterMapOverview": {
         "action": {
             "type": "ClickKey",
             "param": {
