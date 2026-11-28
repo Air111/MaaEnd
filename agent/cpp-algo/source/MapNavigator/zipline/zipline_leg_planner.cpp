@@ -245,15 +245,64 @@ std::optional<navmesh::WorldPoint> mount_approach_point(
     return stand;
 }
 
-// 塔心只有一格, 来路一侧先试, 再退到塔心与离开供电结构的站位
+// 塔的交互面不一定就在标记点上, 实测(试验园区仓储节点那根塔)真正能上索的位置落在
+// 「标记点 + 半格 + 占地半跨」这组点上, 所以四个候选点沿用这个偏移: 偏移在原始世界坐标里
+// 按格算再投影, 地图比例不进这里
+std::vector<navmesh::WorldPoint>
+    corner_spots(const zipline::ZiplineFrame& frame, const zipline::ZiplineNode& tower, const std::array<int, 2>& footprint)
+{
+    const double half_x = grid_half_span(footprint[0]);
+    const double half_z = grid_half_span(footprint[1]);
+    const std::array<double, 2> signs { 1.0, -1.0 };
+    const size_t x_count = half_x > 0.0 ? signs.size() : 1;
+    const size_t z_count = half_z > 0.0 ? signs.size() : 1;
+    std::vector<navmesh::WorldPoint> spots;
+    for (size_t xi = 0; xi < x_count; ++xi) {
+        for (size_t zi = 0; zi < z_count; ++zi) {
+            const zipline::ZiplineMark shifted {
+                .template_id = tower.template_id,
+                .level_id = tower.level_id,
+                .x = tower.world_x + 0.5 + signs[xi] * half_x,
+                .y = tower.world_y,
+                .z = tower.world_z + 0.5 + signs[zi] * half_z,
+            };
+            spots.push_back(to_world(frame.project(shifted)));
+        }
+    }
+    return spots;
+}
+
+// 起点侧/来路侧的塔边点先试, 再依次试占地的四角站位; 四角都落不到可走面时才退回塔心,
+// 最后才试避让供电结构的站位. 每个站位认不到上索提示就换下一个.
 std::vector<navmesh::WorldPoint> mount_spots(
     const NaviParam& param,
     const std::string& locator_zone,
+    const zipline::ZiplineFrame& frame,
     const zipline::ZiplineNode& tower,
+    const std::array<int, 2>& footprint,
     const navmesh::WorldPoint& approach_from,
     const navmesh::WorldPoint& leg_start,
     const std::vector<navmesh::WorldPoint>& supplies)
 {
+    // 日志字段仍叫 anchor, 保持既有日志分析脚本可用
+    const navmesh::WorldPoint anchor = to_world(tower);
+    const double toward_x = anchor.x - approach_from.x;
+    const double toward_y = anchor.y - approach_from.y;
+    std::vector<std::pair<double, navmesh::WorldPoint>> ranked;
+    for (const navmesh::WorldPoint& spot : corner_spots(frame, tower, footprint)) {
+        if (!snaps_onto_tower_floor(param, locator_zone, spot, tower)) {
+            continue;
+        }
+        ranked.emplace_back((spot.x - anchor.x) * toward_x + (spot.y - anchor.y) * toward_y, spot);
+    }
+    // 来路一侧的角格优先; 同侧再按离来路的距离排, 避免先绕到塔背后
+    std::stable_sort(ranked.begin(), ranked.end(), [&approach_from](const auto& lhs, const auto& rhs) {
+        if (lhs.first != rhs.first) {
+            return lhs.first < rhs.first;
+        }
+        return planar_distance(lhs.second, approach_from) < planar_distance(rhs.second, approach_from);
+    });
+
     std::vector<navmesh::WorldPoint> spots;
     const auto add_unique = [&spots](const navmesh::WorldPoint& spot) {
         const bool duplicate = std::any_of(spots.begin(), spots.end(), [&spot](const navmesh::WorldPoint& existing) {
@@ -263,20 +312,23 @@ std::vector<navmesh::WorldPoint> mount_spots(
             spots.push_back(spot);
         }
     };
-    // 首位是新增的"角色这一侧"塔边点: 沿起点 → 塔心方向贴到塔边, 从那侧上索不用先绕到塔背面.
-    // 后面的候选保持原样(迎接近段来路的塔边点 → 塔心 → 避让供电结构的点),
-    // 只在首位认不到上索提示时才依次使用.
+    // 首位是"角色这一侧"的塔边点: 沿起点 → 塔心方向贴到塔边, 从那侧上索不用先绕到塔背面.
     if (const std::optional<navmesh::WorldPoint> start_side = mount_approach_point(param, locator_zone, tower, leg_start)) {
         add_unique(*start_side);
     }
     if (const std::optional<navmesh::WorldPoint> approach_spot = mount_approach_point(param, locator_zone, tower, approach_from)) {
         add_unique(*approach_spot);
     }
-    add_unique(to_world(tower));
+    for (const auto& entry : ranked) {
+        add_unique(entry.second);
+    }
+    if (ranked.empty()) {
+        add_unique(anchor);
+    }
     if (const std::optional<navmesh::WorldPoint> stand = mount_stand_point(param, locator_zone, tower, supplies)) {
         add_unique(*stand);
     }
-    LogDebug << "ZiplineRoute: stand points to try at the mount tower" << VAR(spots.size()) << VAR(tower.x) << VAR(tower.y)
+    LogDebug << "ZiplineRoute: stand points to try at the mount tower" << VAR(spots.size()) << VAR(anchor.x) << VAR(anchor.y)
              << VAR(leg_start.x) << VAR(leg_start.y) << VAR(approach_from.x) << VAR(approach_from.y);
     return spots;
 }
@@ -549,6 +601,7 @@ struct PlanInputs
     const NaviParam& param;
     const ZiplineLegRequest& request;
     const zipline::ZiplineFrames& frames;
+    const zipline::ZiplineFrame& frame;
     const zipline::ZiplineCostModel& cost;
     double gain_threshold = 0.0;
 };
@@ -1120,7 +1173,9 @@ std::optional<ZiplineRoute> plan_edited_chain(
     route.mount_spots = mount_spots(
         in.param,
         in.request.locator_zone,
+        in.frame,
         route.towers.front(),
+        in.frames.footprint(route.towers.front().template_id),
         approach_from,
         in.request.start,
         sites.supply_points);
@@ -1320,7 +1375,9 @@ ZiplineRoute assemble_route(const PlanInputs& in, const TowerSites& sites, const
     route.mount_spots = mount_spots(
         in.param,
         in.request.locator_zone,
+        in.frame,
         route.towers.front(),
+        in.frames.footprint(route.towers.front().template_id),
         approach_from,
         in.request.start,
         sites.supply_points);
@@ -1438,6 +1495,7 @@ std::optional<ZiplineRoute> PlanZiplineRoute(ZiplineOutcome* outcome, const Navi
         .param = param,
         .request = request,
         .frames = data->frames,
+        .frame = *frame,
         .cost = cost,
         .gain_threshold = gain_threshold,
     };

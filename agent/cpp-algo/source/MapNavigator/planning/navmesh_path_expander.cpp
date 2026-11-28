@@ -1286,8 +1286,9 @@ std::optional<double>
         state->saved_zipline_done = false;
         return baseline_walk_length(span_start.route_start, *out_path, output_begin);
     }
-    // 保存的滑索路径已经把上下索两段定死了, 先只规划这两段; 仓储前那十几秒一半是白展开的走路基线
-    if (!split_at_jump_pads && walking_span && target_index) {
+    // 保存的滑索路径已经把上下索两段定死了, 先只规划这两段; 命中就用它, 不先展开走路基线,
+    // 也不跟走路比代价. 跳板段同样先试保存路径, 规划不出来才回退到下面的分段基线比较.
+    if (walking_span && target_index) {
         if (const std::optional<double> saved_cost = append_saved_zipline_span(ctx, state, out_path, begin, end, *target_index)) {
             return saved_cost;
         }
