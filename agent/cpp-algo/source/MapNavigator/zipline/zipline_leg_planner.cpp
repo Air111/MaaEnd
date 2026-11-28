@@ -280,6 +280,7 @@ std::vector<navmesh::WorldPoint> mount_spots(
              << VAR(leg_start.x) << VAR(leg_start.y) << VAR(approach_from.x) << VAR(approach_from.y);
     return spots;
 }
+
 // BaseNavRouteResult::cost 是搜索代价, 和几何长度不能混用
 double polyline_length(const navmesh::WorldPath& path)
 {
@@ -1089,12 +1090,26 @@ std::optional<ZiplineRoute> plan_edited_chain(
     }
     route.e_hops.resize(route.towers.size() - 1, false);
     route.hop_alternates.resize(route.towers.size() - 1);
+    route.hop_bystanders.resize(route.towers.size() - 1);
     for (size_t hop = entry; hop + 1 < chain.size(); ++hop) {
         for (const size_t other : graph.all[chain[hop]]) {
             if (other != chain[hop + 1]) {
                 route.hop_alternates[hop - entry].push_back(nodes[other]);
             }
         }
+        // 与自动选择那条路一致: 手工链也可能落在这根架子的别的索上, 运行时按 bystanders 认出落点
+        std::vector<zipline::ZiplineNode> bystanders;
+        for (const size_t other : graph.all[chain[hop]]) {
+            if (other != chain[hop + 1] && !linked(graph.all, chain[hop], other)) {
+                bystanders.push_back(nodes[other]);
+            }
+        }
+        const std::vector<InterceptedHop>& intercepted = graph.intercepted[chain[hop]];
+        const auto stop = std::ranges::find(intercepted, chain[hop + 1], &InterceptedHop::to);
+        if (stop != intercepted.end() && !linked(graph.all, chain[hop], stop->interceptor)) {
+            bystanders.push_back(nodes[stop->interceptor]);
+        }
+        route.hop_bystanders[hop - entry] = std::move(bystanders);
     }
     if (in.request.capture_diagnostics) {
         route.diagnostics.push_back(approach->diagnostic);

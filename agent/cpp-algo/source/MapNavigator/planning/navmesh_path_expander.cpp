@@ -784,6 +784,8 @@ void append_hop_waypoints(
             for (const zipline::ZiplineNode& other : route.hop_alternates[hop]) {
                 hop_plan.siblings.push_back(ToNodeRef(other));
             }
+        }
+        if (hop < route.hop_bystanders.size()) {
             for (const zipline::ZiplineNode& other : route.hop_bystanders[hop]) {
                 hop_plan.bystanders.push_back(ToNodeRef(other));
             }
@@ -876,7 +878,7 @@ std::optional<double> try_append_zipline_leg(
 
     const size_t insert_index = out_path->size();
     const navmesh::WorldPoint mount = route->approach.points.back();
-    // 架子坐标是角格锚点, 走到跟前常碰不到设备, 所以头一跳瞄第一个站位
+    // 架子坐标是森空岛中心坐标, 走到跟前常碰不到设备, 所以头一跳瞄首选上索站位
     const navmesh::WorldPoint mount_spot = route->mount_spots.empty() ? mount : route->mount_spots.front();
     // 起点已经贴着上索站位时不要先生成一段走远再回来的 approach: 直接把 ZIPLINE 点
     // 作为当前目标, 让现有的 mount prompt 预筛在起点先试一次.
@@ -1227,6 +1229,7 @@ std::optional<double> append_saved_zipline_span(
     // 没有走路基线, 叠层处只能按坐标本身落层
     const ProjectedTarget target = resolve_projected_target(ctx->mesh->pack, ctx->param->path[target_index]);
     const size_t output_begin = out_path->size();
+    const LegState previous_state = *state;
     LegState shortcut_state = *state;
     std::vector<Waypoint> shortcut;
     const std::optional<double> cost = try_append_zipline_leg(ctx, &shortcut_state, &shortcut, target, std::nullopt, true);
@@ -1247,6 +1250,9 @@ std::optional<double> append_saved_zipline_span(
     LogInfo << "Zipline planned the saved path on its own, the walk was never expanded." << VAR(begin) << VAR(end)
             << VAR(target_index) << VAR(out_path->size() - output_begin);
     if (!append_span_tail(ctx, state, out_path, target_index, end)) {
+        // 段尾失败就整段撤销, 调用方还要按作者路线重新展开这一段
+        out_path->resize(output_begin);
+        *state = previous_state;
         return std::nullopt;
     }
     return cost;
@@ -1267,18 +1273,18 @@ std::optional<double>
     const bool walking_span = std::any_of(path.begin() + static_cast<std::ptrdiff_t>(begin),
                                           path.begin() + static_cast<std::ptrdiff_t>(end),
                                           [](const Waypoint& waypoint) { return IsMovementPoint(waypoint); });
-    // 保存路径已在上一个 required 途径点收尾; 这一段从实际落点开始普通走, 不再重新命中保存链.
+    // 保存路径已经在上一个 required 途径点收尾; 这一段从实际落点开始普通走, 不再重新命中保存链.
     if (state->saved_zipline_done) {
         for (size_t index = begin; index < end; ++index) {
             if (cancel_if_stopped(ctx, *state)) {
-                return false;
+                return std::nullopt;
             }
             if (!append_stamped_authored_waypoint(ctx, state, out_path, index)) {
-                return false;
+                return std::nullopt;
             }
         }
         state->saved_zipline_done = false;
-        return true;
+        return baseline_walk_length(span_start.route_start, *out_path, output_begin);
     }
     // 保存的滑索路径已经把上下索两段定死了, 先只规划这两段; 仓储前那十几秒一半是白展开的走路基线
     if (!split_at_jump_pads && walking_span && target_index) {
