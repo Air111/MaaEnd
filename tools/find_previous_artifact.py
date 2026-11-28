@@ -34,7 +34,7 @@ def api_get(url: str, token: str | None) -> dict:
 
 def main() -> int:
     repository = os.environ.get("GITHUB_REPOSITORY", "")
-    branch = os.environ.get("BRANCH", "")
+    branch = os.environ.get("BRANCH", "").removeprefix("refs/heads/")
     current_run = os.environ.get("GITHUB_RUN_ID", "")
     token = os.environ.get("GITHUB_TOKEN") or None
 
@@ -46,7 +46,13 @@ def main() -> int:
         f"{API_BASE}/repos/{repository}/actions/artifacts"
         f"?name={urllib.parse.quote(ARTIFACT_NAME)}&per_page=100"
     )
-    runs_url = f"{API_BASE}/repos/{repository}/actions/runs?status=success&per_page=50"
+    # Only install runs may provide the incremental base. Querying all successful
+    # workflows would overflow the page with lint/test runs and could hide the
+    # previous install of the same branch.
+    runs_url = (
+        f"{API_BASE}/repos/{repository}/actions/workflows/install.yml/runs"
+        f"?status=success&per_page=100"
+    )
     if branch:
         runs_url += f"&branch={urllib.parse.quote(branch, safe='')}"
 
