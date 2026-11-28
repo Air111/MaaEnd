@@ -114,6 +114,7 @@ Pre-sell (switch to the selling operator) and post-sell (restore production assi
 4. within a tier, stable game-list order (count of matched outpost `features` desc → numeric charId desc; rarity is irrelevant).
 
 When outpost prosperity is maxed, prosperity bonuses stop counting and only trade income defines the tiers. A "perfect candidate" is the intersection of the outpost's top selling tier and its restore candidates; if the account owns any perfect candidate, planning picks only from them (even if one is occupied by another enabled outpost — no downgrade), otherwise it falls back to the top available tier. If the current operator already belongs to the best available tier, it is kept without opening the list.
+
 - With "Ignore Outpost Prosperity" enabled, every outpost is treated as prosperity-maxed and operators are tiered by trade income only; prosperity is still recognized and written back to the cache.
 
 ### Post-sell Restore Assignment
